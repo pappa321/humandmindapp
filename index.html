@@ -228,6 +228,11 @@ input:disabled { opacity: 0.7; }
 .cal-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--noshow); z-index: 3; pointer-events: none; }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; font-size: 13px; color: var(--muted); }
 .cal-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.ev-ext { background: var(--cancel-soft); color: var(--cancel); z-index: 1; font-size: 10px; font-weight: 600; text-align: left; word-break: break-word; }
+.cal-adlab { font-size: 10px; color: var(--muted); text-align: right; padding: 4px 4px 0 0; border-bottom: 1px solid var(--line); line-height: 1.2; }
+.cal-ad { border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 2px; min-height: 22px; }
+.cal-adb { width: 100%; border: 0; border-radius: 4px; background: var(--cancel-soft); color: var(--cancel); font-size: 10px; font-weight: 600; padding: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; cursor: pointer; }
+.cal-load { font-weight: 400; color: var(--muted); }
 .calbox { margin-bottom: 18px; }
 .calbox summary { cursor: pointer; font-weight: 600; font-size: 15.5px; min-height: 44px; display: flex; align-items: center; }
 
@@ -305,6 +310,7 @@ input:disabled { opacity: 0.7; }
 .sbtn { min-height: 58px; border-radius: 14px; border: 2px solid transparent; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .sbtn.b-plan, .sbtn.b-held, .sbtn.b-noshow, .sbtn.b-cancel, .sbtn.b-resched { font-size: 17px; padding: 0 10px; }
 .sbtn.cur { border-color: currentColor; }
+.sgrid .sbtn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .sbtn:disabled { opacity: 0.6; }
 .sheet-meet { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .sheet-links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
@@ -360,13 +366,13 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbwmz0n80NM8nVBlshxv2g8X91FfwAVBb8f3gUZLydMc0sEcYnLJQPVjYNVqyUcscMng/exec',
+  API_URL: 'IDE_MASOLD_A_WEB_APP_URL-T',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
 const DEFAULT_PRICE = 8000;   // egy 50 perces alkalom alapára (HUF)
 const SESSION_MINUTES = 50;  // egy alkalom alapértelmezett hossza (perc)
-const ST = { PLANNED: 'Tervezett', HELD: 'Megtartva', NOSHOW: 'Nem jelent meg', CANCELLED: 'Lemondta', RESCHED: 'Átütemezve' };
+const ST = { PLANNED: 'Tervezett', HELD: 'Megtartva', NOSHOW: 'Nem jelent meg' };
 
 /* ---------------- Segédek ---------------- */
 const ls = {
@@ -456,8 +462,8 @@ const icon = (n, cls) => `<svg class="ic ${cls || ''}" viewBox="0 0 24 24" aria-
 const typeIcon = t => icon(t === 'Video' ? 'video' : t === 'Chat' ? 'chat' : t === 'Telefon' ? 'phone' : 'cal', 'sm');
 
 const STATUS_CLASS = {
-  'Tervezett': 'plan', 'Megtartva': 'held', 'Nem jelent meg': 'noshow', 'Lemondta': 'cancel', 'Átütemezve': 'resched',
-  'Aktív': 'held', 'Szünetel': 'resched', 'Lezárt': 'cancel'
+  'Tervezett': 'plan', 'Megtartva': 'held', 'Nem jelent meg': 'noshow',
+  'Aktív': 'held', 'Lezárt': 'cancel'
 };
 const stClass = s => STATUS_CLASS[s] || 'plan';
 const MEET_PREFIX = 'https:' + String.fromCharCode(47, 47) + 'meet.google.com/';
@@ -477,6 +483,7 @@ const state = {
   sessSkip: {},
   cal: { week: mondayOf(todayStr()) },
   pick: { week: '' },
+  ext: {},
   rep: { period: 'month', from: '', to: '', query: 'all', price: DEFAULT_PRICE, aiPrompt: '', aiAnswer: '', aiBusy: false, aiError: '', aiInfo: '' }
 };
 { const p = ls.get('kn_price'); if (p !== null && !isNaN(Number(p))) state.rep.price = Math.max(0, Number(p)); }
@@ -531,8 +538,10 @@ async function call(action, data) {
     }
     throw new Error(json.error || 'Ismeretlen hiba.');
   }
-  state.data = json.data;
-  if (CONFIG.CACHE_DATA) ls.set('kn_cache', JSON.stringify(json.data));
+  if (json.data) {
+    state.data = json.data;
+    if (CONFIG.CACHE_DATA) ls.set('kn_cache', JSON.stringify(json.data));
+  }
   return json;
 }
 
@@ -540,7 +549,7 @@ async function loadData() {
   if (!state.token) return;
   state.loading = true; state.loadError = '';
   updateRefreshIcon();
-  try { await call('init'); }
+  try { await call('init'); state.ext = {}; }
   catch (e) { state.loadError = e.message; }
   state.loading = false;
   if (!isFormRoute()) render(true); else updateRefreshIcon();
@@ -603,8 +612,7 @@ function rail(c) {
     segs += `<i class="${cls}"></i>`;
   }
   const extra =
-    (s.noShow ? `<span class="mini b-noshow">${s.noShow} nem jelent meg</span>` : '') +
-    (s.cancelled ? `<span class="mini b-cancel">${s.cancelled} lemondta</span>` : '');
+    (s.noShow ? `<span class="mini b-noshow">${s.noShow} nem jelent meg</span>` : '');
   return `<div class="rail" role="img" aria-label="${s.held} megtartva ${planned} alkalomból">${segs}</div>
     <div class="rail-note"><span><b>${s.held}</b> / ${planned} megtartva</span><span>${s.remaining} hátra</span>${extra}</div>`;
 }
@@ -641,7 +649,7 @@ function caseCard(c) {
 
 function sessionRow(s, mode) {
   const c = caseById(s.Esetszam);
-  const dim = (s.Statusz === ST.CANCELLED || s.Statusz === ST.RESCHED) ? ' dim' : '';
+  const dim = '';
   if (mode === 'case') {
     return `<button class="srow${dim}" data-act="open-session" data-id="${esc(s.Foglalkozas_ID)}">
       <span class="srow-time"><b>${esc(fmtShort(s.Datum))}</b><i>${esc(parseD(s.Datum).toLocaleDateString('hu-HU', { weekday: 'short' }))}</i></span>
@@ -679,14 +687,40 @@ const toMin = t => { const p = String(t).split(':').map(Number); return p[0] * 6
 const validTime = t => /^\d{2}:\d{2}$/.test(t || '');
 const initials = n => String(n || '').trim().split(/\s+/).slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('');
 
+const EXT_TTL = 120000;
+/** A Google Naptár (debre.tunde@gmail.com) eseményeinek betöltése az adott hétre; a kész adat után a naptárak frissülnek. */
+function ensureExt(week) {
+  const e = state.ext[week];
+  if (e && (e.loading || Date.now() - e.ts < EXT_TTL)) return;
+  state.ext[week] = Object.assign({}, e || { events: [], error: '', ts: 0 }, { loading: true });
+  const prev = (e && e.events) || [];
+  call('calendarEvents', { from: week, to: addDays(week, 6) })
+    .then(res => { state.ext[week] = { ts: Date.now(), events: res.result || [], error: '' }; })
+    .catch(err => { state.ext[week] = { ts: Date.now(), events: prev, error: err.message }; })
+    .then(() => { refreshCal('home'); refreshCal('pick'); });
+}
+
+function extSheet(x) {
+  const when = x.allDay ? 'egész nap' : x.start + '\u2013' + x.end;
+  openSheet(`<div class="sheet-h">
+      <div><b>${esc(x.title)}</b><span>${esc(fmtDay(x.date))}, ${esc(when)}</span></div>
+      <button class="iconbtn" data-act="close-sheet" aria-label="Bezárás">${icon('x')}</button>
+    </div>
+    <div class="tablenote">Ez az esemény a Google Naptárból érkezik, itt nem szerkeszthető.</div>`);
+}
+
 function calendarHtml(kind, o) {
   o = o || {};
   const week = kind === 'home' ? state.cal.week : state.pick.week;
+  ensureExt(week);
+  const extState = state.ext[week] || { events: [], error: '' };
+  const extEv = extState.events || [];
   const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(week, i));
   const sess = state.data.sessions.filter(s => s.Datum >= days[0] && s.Datum <= days[6] &&
-    s.Statusz !== ST.CANCELLED && s.Statusz !== ST.RESCHED && s.Foglalkozas_ID !== o.excludeId);
+    s.Foglalkozas_ID !== o.excludeId);
   let h0 = CAL_START, h1 = CAL_END;
   sess.forEach(s => { h0 = Math.min(h0, Math.floor(toMin(s.Kezdes) / 60)); h1 = Math.max(h1, Math.ceil(toMin(s.Vege) / 60)); });
+  extEv.filter(x => !x.allDay).forEach(x => { h0 = Math.min(h0, Math.floor(toMin(x.start) / 60)); h1 = Math.max(h1, Math.ceil(toMin(x.end) / 60)); });
   const sel = o.sel && validTime(o.sel.start) ? o.sel : null;
   const selEnd = sel ? (validTime(sel.end) && sel.end > sel.start ? sel.end : addMin(sel.start, SESSION_MINUTES)) : '';
   if (sel) { h0 = Math.min(h0, Math.floor(toMin(sel.start) / 60)); h1 = Math.max(h1, Math.ceil(toMin(selEnd) / 60)); }
@@ -706,22 +740,34 @@ function calendarHtml(kind, o) {
       const top = (toMin(s.Kezdes) - h0 * 60) / 60, hgt = Math.max(0.3, (toMin(s.Vege) - toMin(s.Kezdes)) / 60);
       return `<button class="cal-ev ev-${stClass(s.Statusz)}" style="top:calc(var(--rh) * ${top});height:calc(var(--rh) * ${hgt})" data-act="${kind === 'home' ? 'open-session' : 'cal-busy'}" data-id="${esc(s.Foglalkozas_ID)}" aria-label="${esc((c ? c.Nev : s.Esetszam) + ' ' + s.Kezdes)}">${esc(initials(c ? c.Nev : ''))}</button>`;
     }).join('');
+    const exs = extEv.filter(x => x.date === d && !x.allDay).map(x => {
+      const top = (toMin(x.start) - h0 * 60) / 60, hgt = Math.max(0.3, (toMin(x.end) - toMin(x.start)) / 60);
+      return `<button class="cal-ev ev-ext" style="top:calc(var(--rh) * ${top});height:calc(var(--rh) * ${hgt})" data-act="cal-ext" data-id="${esc(x.id)}" data-date="${d}" data-start="${esc(x.start)}" aria-label="${esc(x.title + ' ' + x.start)}">${esc(x.title)}</button>`;
+    }).join('');
     const pv = sel && sel.date === d
       ? `<div class="cal-sel" style="top:calc(var(--rh) * ${(toMin(sel.start) - h0 * 60) / 60});height:calc(var(--rh) * ${(toMin(selEnd) - toMin(sel.start)) / 60})"></div>` : '';
     const now = d === t && nowM >= h0 * 60 && nowM < h1 * 60
       ? `<div class="cal-now" style="top:calc(var(--rh) * ${(nowM - h0 * 60) / 60})"></div>` : '';
-    return `<div class="cal-col">${slots}${evs}${pv}${now}</div>`;
+    return `<div class="cal-col">${slots}${exs}${evs}${pv}${now}</div>`;
   }).join('');
+  const adOn = d => extEv.filter(x => x.date === d && x.allDay);
+  const adRow = days.some(d => adOn(d).length)
+    ? `<div class="cal-adlab">egész nap</div>` + days.map(d => {
+        const l = adOn(d);
+        return `<div class="cal-ad">${l.length ? `<button class="cal-adb" data-act="cal-ext" data-id="${esc(l[0].id)}" data-date="${d}" data-start="">${esc(l[0].title)}${l.length > 1 ? ' +' + (l.length - 1) : ''}</button>` : ''}</div>`;
+      }).join('')
+    : '';
   const thisWeek = week === mondayOf(t);
   return `<div class="cal" style="--rh:${rh}px">
     <div class="cal-head">
       <button class="iconbtn" data-act="cal-prev" data-k="${kind}" aria-label="Előző hét">${icon('back')}</button>
-      <div class="cal-title">${esc(fmtShort(days[0]))} – ${esc(fmtShort(days[6]))}</div>
+      <div class="cal-title">${esc(fmtShort(days[0]))} – ${esc(fmtShort(days[6]))}${extState.loading ? ' <small class="cal-load">frissül…</small>' : ''}</div>
       <button class="iconbtn" data-act="cal-next" data-k="${kind}" aria-label="Következő hét">${icon('next')}</button>
       <button class="chip sm" data-act="cal-today" data-k="${kind}" ${thisWeek ? 'disabled' : ''}>Ma</button>
     </div>
-    <div class="cal-grid"><div></div>${heads}<div class="cal-times">${times}</div>${cols}</div>
-    <div class="cal-legend"><span><i style="background:var(--plan)"></i>Tervezett</span><span><i style="background:var(--held)"></i>Megtartva</span><span><i style="background:var(--noshow)"></i>Nem jelent meg</span>${kind === 'pick' ? '<span><i style="border:2px dashed var(--brand)"></i>Az új időpont</span>' : ''}</div>
+    <div class="cal-grid"><div></div>${heads}${adRow}<div class="cal-times">${times}</div>${cols}</div>
+    <div class="cal-legend"><span><i style="background:var(--plan)"></i>Tervezett</span><span><i style="background:var(--held)"></i>Megtartva</span><span><i style="background:var(--noshow)"></i>Nem jelent meg</span><span><i style="background:var(--cancel)"></i>Google Naptár</span>${kind === 'pick' ? '<span><i style="border:2px dashed var(--brand)"></i>Az új időpont</span>' : ''}</div>
+    ${extState.error ? `<div class="tablenote">A Google Naptár eseményei nem tölthetők be: ${esc(extState.error)}</div>` : ''}
   </div>`;
 }
 
@@ -789,7 +835,7 @@ function viewHome() {
 /* Esetek */
 function viewCases() {
   const d = state.data;
-  const filters = ['Aktív', 'Szünetel', 'Lezárt', 'Mind'];
+  const filters = ['Aktív', 'Lezárt', 'Mind'];
   return `${topbar({ title: 'Esetek', sub: `${d.cases.length} eset`, right: refreshBtn() })}
   ${errorBar()}
   <main>
@@ -841,7 +887,6 @@ function viewCase(id) {
         <div class="tile t-plan"><b>${c.Tervezett_alkalmak}</b><span>Tervezett</span></div>
         <div class="tile t-held"><b>${s.held}</b><span>Megtartva</span></div>
         <div class="tile t-noshow"><b>${s.noShow}</b><span>Nem jelent meg</span></div>
-        <div class="tile"><b>${s.cancelled}</b><span>Lemondta</span></div>
         <div class="tile"><b>${s.remaining}</b><span>Hátralévő</span></div>
       </div>
     </section>
@@ -1142,12 +1187,12 @@ function runQuery() {
     ss.forEach(s => (by[s.Esetszam] = by[s.Esetszam] || []).push(s));
     const rows = Object.keys(by).sort((a, b) => a.localeCompare(b, 'hu')).map(id => {
       const c = caseById(id), l = by[id];
-      return [id, c ? c.Nev : '', c ? c.Tervezett_alkalmak : 0, cnt(l, ST.HELD), cnt(l, ST.NOSHOW), cnt(l, ST.CANCELLED),
-        cnt(l, ST.RESCHED), cnt(l, ST.PLANNED), l.length, c ? c.stats.remaining : 0];
+      return [id, c ? c.Nev : '', c ? c.Tervezett_alkalmak : 0, cnt(l, ST.HELD), cnt(l, ST.NOSHOW),
+        cnt(l, ST.PLANNED), l.length, c ? c.stats.remaining : 0];
     });
     res = {
-      columns: [C('Esetszám'), C('Név'), C('Tervezett alkalmak', 1), C('Megtartva', 1), C('Nem jelent meg', 1), C('Lemondta', 1),
-        C('Átütemezve', 1), C('Még tervezett', 1), C('Összes az időszakban', 1), C('Hátralévő (összesen)', 1)],
+      columns: [C('Esetszám'), C('Név'), C('Tervezett alkalmak', 1), C('Megtartva', 1), C('Nem jelent meg', 1),
+        C('Még tervezett', 1), C('Összes az időszakban', 1), C('Hátralévő (összesen)', 1)],
       rows: rows, summary: rows.length + ' eset foglalkozással az időszakban'
     };
     res.totals = rows.length ? sumRow(res.columns, rows) : null;
@@ -1167,13 +1212,13 @@ function runQuery() {
     ss.forEach(s => { if (s.Tipus && types.indexOf(s.Tipus) < 0) types.push(s.Tipus); });
     const rows = types.map(t => {
       const l = ss.filter(s => s.Tipus === t);
-      return [t, l.length, cnt(l, ST.HELD), cnt(l, ST.NOSHOW), cnt(l, ST.CANCELLED), cnt(l, ST.RESCHED), cnt(l, ST.PLANNED), pct(l.length, ss.length)];
+      return [t, l.length, cnt(l, ST.HELD), cnt(l, ST.NOSHOW), cnt(l, ST.PLANNED), pct(l.length, ss.length)];
     });
     res = {
-      columns: [C('Típus'), C('Összes', 1), C('Megtartva', 1), C('Nem jelent meg', 1), C('Lemondta', 1), C('Átütemezve', 1), C('Még tervezett', 1), C('Arány (%)', 1)],
+      columns: [C('Típus'), C('Összes', 1), C('Megtartva', 1), C('Nem jelent meg', 1), C('Még tervezett', 1), C('Arány (%)', 1)],
       rows: rows, summary: ss.length + ' foglalkozás típus szerint'
     };
-    if (ss.length) { res.totals = sumRow(res.columns, rows); res.totals[7] = 100; } else { res.rows = []; }
+    if (ss.length) { res.totals = sumRow(res.columns, rows); res.totals[5] = 100; } else { res.rows = []; }
 
   } else if (key === 'ages') {
     const ids = Array.from(new Set(ss.map(s => s.Esetszam)));
@@ -1511,7 +1556,8 @@ function sessionSheet(id) {
     <div class="sheet-links">
       <a class="btn btn-ghost" href="#/session/${encodeURIComponent(id)}/edit" data-act="close-sheet">Szerkesztés</a>
       <a class="btn btn-ghost" href="#/case/${encodeURIComponent(s.Esetszam)}" data-act="close-sheet">Eset megnyitása</a>
-    </div>`);
+    </div>
+    <div class="tablenote">Átütemezéshez a Szerkesztésben módosítsd az időpontot: így a foglalkozás csak egyszer szerepel.</div>`);
 }
 
 function caseExpirySheet(id) {
@@ -1560,18 +1606,9 @@ async function setStatus(id, status, btn) {
     sessionSheet(id);
     return;
   }
-  if (status === ST.RESCHED) {
-    const s = sessionById(id);
-    openSheet(`<div class="sheet-h"><div><b>Átütemezve</b><span>Rögzítsünk egy új időpontot ehhez az esethez?</span></div></div>
-      <div class="sheet-links">
-        <button class="btn btn-ghost" data-act="close-sheet">Most nem</button>
-        <a class="btn btn-primary" href="#/session/new?case=${encodeURIComponent(s.Esetszam)}&from=${encodeURIComponent(id)}" data-act="close-sheet">Új időpont</a>
-      </div>`);
-  } else {
-    closeSheet();
-    if (meetErr) toast('Státusz mentve, de a naptári esemény nem frissült: ' + meetErr, true);
-    else toast('Státusz mentve: ' + status);
-  }
+  closeSheet();
+  if (meetErr) toast('Státusz mentve, de a naptári esemény nem frissült: ' + meetErr, true);
+  else toast('Státusz mentve: ' + status);
   if (!isFormRoute()) render(true);
 }
 
@@ -1773,6 +1810,12 @@ document.addEventListener('click', e => {
         en.dataset.touched = '';
         updateExpiryNote(); syncPick();
       }
+      break;
+    }
+    case 'cal-ext': {
+      const list = ((state.ext[mondayOf(el.dataset.date)] || {}).events || [])
+        .filter(x => x.id === el.dataset.id && x.date === el.dataset.date);
+      if (list[0]) extSheet(list[0]);
       break;
     }
     case 'cal-busy': {
