@@ -1,7 +1,7 @@
 {
   "name": "Konzultációs időpont-nyilvántartó",
   "short_name": "Konzultációk",
-  "description": "Esetek és konzultációs foglalkozások nyilvántartása",
+  "description": "Esetek és konzultációs ülések nyilvántartása",
   "lang": "hu",
   "start_url": "./",
   "scope": "./",

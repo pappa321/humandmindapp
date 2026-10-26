@@ -153,7 +153,7 @@ h2 small { font-size: 14px; font-weight: 600; color: var(--muted); }
 .case-id { color: var(--muted); font-size: 14.5px; font-variant-numeric: tabular-nums; }
 .case-next { margin-top: 6px; font-size: 14.5px; color: var(--muted); }
 
-/* Foglalkozás sor */
+/* Ülés sor */
 .srow {
   width: 100%; display: flex; align-items: center; gap: 14px; text-align: left;
   min-height: 72px; padding: 12px 14px; border-radius: var(--radius);
@@ -241,6 +241,14 @@ input:disabled { opacity: 0.7; }
 .srow.late .srow-time b { color: var(--noshow); }
 .aianswer { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
 .row2 input[type=date] { padding: 12px 8px; font-size: 16px; }
+.combo { position: relative; }
+.combo input { padding-right: 52px; }
+.combo-btn { position: absolute; right: 2px; top: 2px; width: 50px; height: 50px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 35; max-height: 232px; overflow-y: auto; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(8, 20, 26, 0.18); }
+.combo-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 46px; padding: 0 14px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; font-weight: 600; cursor: pointer; }
+.combo-item:last-child { border-bottom: 0; }
+.combo-item:active { background: var(--brand-soft); }
+.combo-item small { color: var(--muted); font-weight: 400; }
 .cat-sug { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; scrollbar-width: none; }
 .cat-sug::-webkit-scrollbar { display: none; }
 .cat-sug:empty { display: none; }
@@ -317,11 +325,13 @@ input:disabled { opacity: 0.7; }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
-  bottom: calc(var(--nav-h) + 20px + env(safe-area-inset-bottom));
-  max-width: min(92vw, 560px); padding: 13px 18px; border-radius: 14px;
-  background: var(--ink); color: var(--bg); font-weight: 600; text-align: center;
+  top: calc(10px + env(safe-area-inset-top));
+  width: max-content; max-width: min(92vw, 560px);
+  display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 18px; border-radius: 14px;
+  background: var(--ink); color: var(--bg); font-weight: 600; box-shadow: 0 8px 24px rgba(8, 20, 26, 0.3);
 }
 .toast.err { background: var(--noshow); color: #fff; }
+.toast-x { flex: none; width: 38px; height: 38px; border: 0; border-radius: 50%; background: rgba(127, 127, 127, 0.3); color: inherit; font-size: 24px; line-height: 1; cursor: pointer; }
 .login { padding-top: 12vh; }
 .login p { color: var(--muted); }
 
@@ -357,7 +367,7 @@ input:disabled { opacity: 0.7; }
   <div class="sheet-bg" data-act="close-sheet"></div>
   <div class="sheet-panel" id="sheet-panel" role="dialog" aria-modal="true"></div>
 </div>
-<div id="toast" class="toast" hidden role="status"></div>
+<div id="toast" class="toast" hidden role="status"><span id="toast-msg"></span><button type="button" class="toast-x" data-act="close-toast" aria-label="Bezárás">&times;</button></div>
 
 <script>
 'use strict';
@@ -366,7 +376,7 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbzdGgIzUzniStlB9t2VQK8gBaoUtfzcr1CawfylkxqFF5UjwxW2xb4eZekc-xp4AHzl/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxkNaJfhG6ZrIWbOq7ttDH1Bfd7CHh3-BMGYLw83-VVo9B7ekw9RZ_XQaCtIMS0O2mK/exec',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
@@ -450,6 +460,7 @@ const ICON = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
   next: '<path d="M9 5l7 7-7 7"/>',
+  chev: '<path d="M6 9l6 6 6-6"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
   video: '<rect x="3" y="6.5" width="12.5" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3"/>',
   chat: '<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>',
@@ -592,7 +603,7 @@ function nav(active) {
   return `<nav class="nav"><div>
     ${item('#/', 'home', 'home', 'Kezdőlap')}
     ${item('#/cases', 'cases', 'users', 'Esetek')}
-    ${item('#/sessions', 'sessions', 'cal', 'Foglalkozások')}
+    ${item('#/sessions', 'sessions', 'cal', 'Ülések')}
     ${item('#/reports', 'reports', 'chart', 'Lekérdezések')}
   </div></nav>`;
 }
@@ -615,6 +626,17 @@ function rail(c) {
     (s.noShow ? `<span class="mini b-noshow">${s.noShow} nem jelent meg</span>` : '');
   return `<div class="rail" role="img" aria-label="${s.held} megtartva ${planned} alkalomból">${segs}</div>
     <div class="rail-note"><span><b>${s.held}</b> / ${planned} megtartva</span><span>${s.remaining} hátra</span>${extra}</div>`;
+}
+
+function wosTag(c) {
+  if (!c.WOS) return '';
+  if (!state.data.wosDoneEnabled) return '<span class="mini b-plan">WOS kell</span>';
+  return c.WOS_megvan ? '<span class="mini b-held">WOS megvan</span>' : '<span class="mini b-resched">WOS hiányzik</span>';
+}
+function wosText(c) {
+  if (!c.WOS) return 'Nem kell';
+  if (!state.data.wosDoneEnabled) return 'Kell';
+  return c.WOS_megvan ? 'Kell, megvan' : 'Kell, még nincs meg';
 }
 
 function expiryTag(c) {
@@ -640,7 +662,7 @@ function caseCard(c) {
   return `<a class="card case" href="#/case/${encodeURIComponent(c.Esetszam)}">
     <div class="case-top">
       <div><div class="case-name">${esc(c.Nev)}</div><div class="case-id">${esc(c.Esetszam)}</div>${c.Kategoria ? `<div class="case-cat">${esc(c.Kategoria)}</div>` : ''}</div>
-      <div class="tags">${expiryTag(c)}${c.WOS ? '<span class="mini b-plan">WOS</span>' : ''}${badge(c.Statusz)}</div>
+      <div class="tags">${expiryTag(c)}${wosTag(c)}${badge(c.Statusz)}</div>
     </div>
     ${rail(c)}
     ${n ? `<div class="case-next">Következő: ${esc(fmtShort(n.Datum))}, ${esc(n.Kezdes)}</div>` : ''}
@@ -797,20 +819,20 @@ function viewHome() {
   ${errorBar()}
   <main>
     <section class="actions2">
-      <a class="btn btn-primary" href="#/session/new">${icon('plus')} Új foglalkozás</a>
+      <a class="btn btn-primary" href="#/session/new">${icon('plus')} Új ülés</a>
       <a class="btn btn-ghost" href="#/case/new">${icon('plus')} Új eset</a>
     </section>
-    ${pending.length ? `<section><div class="notice"><span>${pending.length} foglalkozás státusza még nincs rögzítve</span>
+    ${pending.length ? `<section><div class="notice"><span>${pending.length} ülés státusza még nincs rögzítve</span>
       <button class="btn" data-act="show-pending">Rögzítés</button></div></section>` : ''}
     ${expiring.length ? `<section>
       <h2>Lejáró esetek <small>${EXPIRY_WARN_DAYS} napon belül</small></h2>
       <div class="list">${expiring.map(expiringRow).join('')}</div>
     </section>` : ''}
     <section>
-      <h2>Ma <small>${today.length} foglalkozás</small></h2>
+      <h2>Ma <small>${today.length} ülés</small></h2>
       ${today.length
         ? `<div class="list">${today.map(s => sessionRow(s, 'day')).join('')}</div>`
-        : `<div class="empty">Ma nincs foglalkozás.</div>`}
+        : `<div class="empty">Ma nincs ülés.</div>`}
     </section>
     <section>
       <h2>Heti naptár</h2>
@@ -820,7 +842,7 @@ function viewHome() {
       <h2>Következő 7 nap <small>${week.length} tervezett</small></h2>
       ${week.length
         ? groupedSessions(week.slice(0, 8))
-        : `<div class="empty">A következő héten nincs tervezett foglalkozás.</div>`}
+        : `<div class="empty">A következő héten nincs tervezett ülés.</div>`}
     </section>
     <section>
       <h2>Áttekintés</h2>
@@ -893,7 +915,7 @@ function viewCase(id) {
     <section class="card">
       <dl class="facts">
         ${c.Kategoria ? `<dt>Kategória</dt><dd>${esc(c.Kategoria)}</dd>` : ''}
-        <dt>WOS</dt><dd>${c.WOS ? 'Igen' : 'Nem'}</dd>
+        <dt>WOS</dt><dd>${wosText(c)}</dd>
         ${expiryOf(c) ? `<dt>Lejárat</dt><dd>${esc(fmtFull(expiryOf(c)))}${daysUntil(expiryOf(c)) < 0 ? ' (lejárt)' : ''}</dd>` : ''}
         ${c.Telefonszam ? `<dt>Telefon</dt><dd>${esc(formatPhone(c.Telefonszam))}</dd>` : ''}
         ${c.Email ? `<dt>E-mail</dt><dd>${esc(c.Email)}</dd>` : ''}
@@ -906,23 +928,28 @@ function viewCase(id) {
       ${c.Eset_leirasa ? `<p class="desc">${esc(c.Eset_leirasa)}</p>` : ''}
     </section>
     <section>
-      <h2>Foglalkozások <small>${sess.length} alkalom</small></h2>
+      ${c.Statusz === 'Lezárt'
+        ? `<button class="btn btn-ghost btn-block" data-act="case-state" data-id="${esc(id)}" data-to="Aktív">Eset újranyitása</button>`
+        : `<button class="btn btn-ghost btn-block" data-act="case-state" data-id="${esc(id)}" data-to="Lezárt">Eset lezárása</button>`}
+    </section>
+    <section>
+      <h2>Ülések <small>${sess.length} alkalom</small></h2>
       ${sess.length
         ? `<div class="list">${sess.map(x => sessionRow(x, 'case')).join('')}</div>`
-        : `<div class="empty">Ehhez az esethez még nincs foglalkozás.</div>`}
+        : `<div class="empty">Ehhez az esethez még nincs ülés.</div>`}
     </section>
-    <section><a class="btn btn-primary btn-block" href="#/session/new?case=${encodeURIComponent(id)}">${icon('plus')} Új foglalkozás</a></section>
+    <section><a class="btn btn-primary btn-block" href="#/session/new?case=${encodeURIComponent(id)}">${icon('plus')} Új ülés</a></section>
   </main>${nav('cases')}`;
 }
 
-/* Foglalkozások */
+/* Ülések */
 function viewSessions() {
   const pending = pendingSessions();
   const f = state.sessFilter;
-  return `${topbar({ title: 'Foglalkozások', right: refreshBtn() })}
+  return `${topbar({ title: 'Ülések', right: refreshBtn() })}
   ${errorBar()}
   <main>
-    <a class="btn btn-primary btn-block topact" href="#/session/new">${icon('plus')} Új foglalkozás</a>
+    <a class="btn btn-primary btn-block topact" href="#/session/new">${icon('plus')} Új ülés</a>
     <div class="chips" role="group" aria-label="Szűrés">
       <button class="chip" data-act="sess-filter" data-f="upcoming" aria-pressed="${f === 'upcoming'}">Közelgő</button>
       <button class="chip" data-act="sess-filter" data-f="pending" aria-pressed="${f === 'pending'}">Rögzítésre vár${pending.length ? `<span class="n">${pending.length}</span>` : ''}</button>
@@ -936,11 +963,11 @@ function sessionListHtml() {
   const all = state.data.sessions, f = state.sessFilter, nk = nowKey(), t = todayStr();
   let list, empty;
   if (f === 'pending') {
-    list = pendingSessions(); empty = 'Minden lezajlott foglalkozás státusza rögzítve van.';
+    list = pendingSessions(); empty = 'Minden lezajlott ülés státusza rögzítve van.';
   } else if (f === 'past') {
-    list = all.filter(s => s.Datum < t).reverse(); empty = 'Még nincs korábbi foglalkozás.';
+    list = all.filter(s => s.Datum < t).reverse(); empty = 'Még nincs korábbi ülés.';
   } else {
-    list = all.filter(s => s.Datum >= t); empty = 'Nincs közelgő foglalkozás.';
+    list = all.filter(s => s.Datum >= t); empty = 'Nincs közelgő ülés.';
   }
   if (!list.length) return `<div class="empty">${empty}</div>`;
   if (f === 'past') {
@@ -962,16 +989,24 @@ function categoryList() {
   return Object.keys(counts).map(n => ({ name: n, count: counts[n] }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'hu'));
 }
-function categorySuggestHtml(q) {
+function categoryItemsHtml(q, showAll) {
   const nq = normTxt(q).trim();
   let list = categoryList();
-  if (nq) list = list.filter(x => normTxt(x.name).indexOf(nq) >= 0);
-  list = list.filter(x => normTxt(x.name) !== nq);
-  const starts = x => normTxt(x.name).indexOf(nq) === 0 ? 0 : 1;
-  list.sort((a, b) => starts(a) - starts(b) || b.count - a.count || a.name.localeCompare(b.name, 'hu'));
-  return list.slice(0, 8).map(x =>
-    `<button type="button" class="chip sm" data-act="pick-cat" data-v="${esc(x.name)}">${esc(x.name)}</button>`).join('');
+  if (!showAll) {
+    list = list.filter(x => normTxt(x.name).indexOf(nq) >= 0 && normTxt(x.name) !== nq);
+    const starts = x => normTxt(x.name).indexOf(nq) === 0 ? 0 : 1;
+    list.sort((a, b) => starts(a) - starts(b) || b.count - a.count || a.name.localeCompare(b.name, 'hu'));
+  }
+  return list.map(x =>
+    `<button type="button" class="combo-item" data-act="pick-cat" data-v="${esc(x.name)}"><span>${esc(x.name)}</span><small>${x.count}</small></button>`).join('');
 }
+function showCatList(showAll) {
+  const inp = $('#cat-input'), box = $('#cat-list');
+  if (!inp || !box) return;
+  const html = categoryItemsHtml(inp.value, showAll || !inp.value.trim());
+  box.innerHTML = html; box.hidden = !html;
+}
+function hideCatList() { const box = $('#cat-list'); if (box) box.hidden = true; }
 
 /* Eset űrlap */
 function phoneField(ph) {
@@ -991,13 +1026,16 @@ function phoneField(ph) {
 function viewCaseForm(id) {
   const c = id ? caseById(id) : null;
   if (id && !c) return viewCase(id);
-  const v = c || { WOS: false, Nev: '', Telefonszam: '', Email: '', Eletkor: '', Tervezett_alkalmak: 6, Kategoria: '', Eset_leirasa: '', Statusz: 'Aktív' };
+  const v = c || { WOS: false, WOS_megvan: false, Nev: '', Telefonszam: '', Email: '', Eletkor: '', Tervezett_alkalmak: 6, Kategoria: '', Eset_leirasa: '', Statusz: 'Aktív' };
   const statuses = state.data.settings.caseStatuses;
   const ages = AGE_OPTIONS.indexOf(v.Eletkor) >= 0 || !v.Eletkor ? AGE_OPTIONS : AGE_OPTIONS.concat([v.Eletkor]);
   const catField = state.data.categoryEnabled
     ? `<div class="fld" data-f="Kategoria"><span>Kategória <em>(nem kötelező)</em></span>
-        <input type="text" name="Kategoria" id="cat-input" value="${esc(v.Kategoria)}" maxlength="80" autocomplete="off" placeholder="pl. családterapia, munkahelyi stressz" enterkeyhint="next">
-        <div class="cat-sug" id="cat-sug">${categorySuggestHtml(v.Kategoria)}</div></div>`
+        <div class="combo">
+          <input type="text" name="Kategoria" id="cat-input" value="${esc(v.Kategoria)}" maxlength="80" autocomplete="off" placeholder="Válassz a listából vagy írj újat" enterkeyhint="next">
+          <button type="button" class="combo-btn" data-act="cat-toggle" aria-label="Kategóriák listája">${icon('chev')}</button>
+          <div class="combo-list" id="cat-list" hidden></div>
+        </div></div>`
     : `<div class="fld"><div class="notice"><span>A Kategória mező kikapcsolva: az Esetek munkalapról hiányzik a Kategoria oszlop.</span></div></div>`;
   return `${topbar({ title: id ? 'Eset szerkesztése' : 'Új eset', sub: id ? esc(id) : '', back: true })}
   <main>
@@ -1017,8 +1055,11 @@ function viewCaseForm(id) {
         <div class="msg"></div></label>
       <div class="row-32">
         ${phoneField(v.Telefonszam)}
-        <div class="fld"><span>WOS</span><label class="check"><input type="checkbox" name="WOS" ${v.WOS ? 'checked' : ''}><span>Igen</span></label></div>
+        <div class="fld"><span>WOS</span><label class="check"><input type="checkbox" name="WOS" ${v.WOS ? 'checked' : ''}><span>Kell</span></label></div>
       </div>
+      <div class="fld" id="wos-done" ${v.WOS ? '' : 'hidden'}>${state.data.wosDoneEnabled
+        ? `<label class="check"><input type="checkbox" name="WOS_megvan" ${v.WOS_megvan ? 'checked' : ''}><span>A WOS megvan</span></label>`
+        : `<div class="notice"><span>A „megvan” jelölés kikapcsolva: az Esetek munkalapról hiányzik a WOS_megvan oszlop.</span></div>`}</div>
       <label class="fld" data-f="Email"><span>E-mail <em>(nem kötelező)</em></span>
         <input type="email" name="Email" value="${esc(v.Email)}" inputmode="email" autocapitalize="none" autocomplete="off">
         <div class="msg"></div></label>
@@ -1047,7 +1088,7 @@ function viewCaseForm(id) {
   </div></div>`;
 }
 
-/* Foglalkozás űrlap */
+/* Ülés űrlap */
 function sessionDefaults(caseId, fromId) {
   const settings = state.data.settings;
   const v = { Foglalkozas_ID: '', Esetszam: caseId || '', Datum: addDays(todayStr(), 1), Kezdes: '10:00', Vege: addMin('10:00', SESSION_MINUTES),
@@ -1076,7 +1117,7 @@ function updateExpiryNote() {
 function viewSessionForm(id, params) {
   state.sessSkip = {};
   const existing = id ? sessionById(id) : null;
-  if (id && !existing) return `${topbar({ title: 'Foglalkozás', back: true })}<main><div class="empty">Nem található a foglalkozás.</div></main>`;
+  if (id && !existing) return `${topbar({ title: 'Ülés', back: true })}<main><div class="empty">Nem található az ülés.</div></main>`;
   const v = existing || sessionDefaults(params.get('case'), params.get('from'));
   if (!existing) {
     const pd = params.get('date'), pt = params.get('time');
@@ -1088,7 +1129,7 @@ function viewSessionForm(id, params) {
   const cases = state.data.cases
     .filter(c => c.Statusz !== 'Lezárt' || c.Esetszam === v.Esetszam)
     .sort((a, b) => a.Nev.localeCompare(b.Nev, 'hu'));
-  return `${topbar({ title: existing ? 'Foglalkozás szerkesztése' : 'Új foglalkozás', back: true })}
+  return `${topbar({ title: existing ? 'Ülés szerkesztése' : 'Új ülés', back: true })}
   <main>
     <form id="f" novalidate autocomplete="off">
       <input type="hidden" name="Foglalkozas_ID" value="${esc(v.Foglalkozas_ID)}">
@@ -1119,14 +1160,14 @@ function viewSessionForm(id, params) {
       <label class="fld"><span>Státusz</span>
         <select name="Statusz">${settings.sessionStatuses.map(s => `<option ${s === v.Statusz ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
       ${!state.data.meet && state.data.meetReason ? `<div class="fld"><div class="notice"><span>Google Meet kikapcsolva: ${esc(state.data.meetReason)}</span></div></div>` : ''}
-      ${state.data.meet ? `<div class="fld"><label class="check"><input type="checkbox" name="Meghivo" checked><span>Meghívó küldése az ügyfélnek<small>Minden tervezett foglalkozáshoz Google Meet link készül. Ha be van jelölve, a meghívó az eset e-mail címére is elmegy.</small></span></label></div>` : ''}
+      ${state.data.meet ? `<div class="fld"><label class="check"><input type="checkbox" name="Meghivo" checked><span>Meghívó küldése az ügyfélnek<small>Minden tervezett üléshez Google Meet link készül. Ha be van jelölve, a meghívó az eset e-mail címére is elmegy.</small></span></label></div>` : ''}
       <label class="fld"><span>Megjegyzés <em>(nem kötelező)</em></span>
         <textarea name="Megjegyzes" rows="3">${esc(v.Megjegyzes)}</textarea></label>
     </form>
   </main>
   <div class="actionbar"><div>
     <button class="btn btn-ghost" data-act="back">Mégse</button>
-    <button class="btn btn-primary" data-act="save-session">Foglalkozás mentése</button>
+    <button class="btn btn-primary" data-act="save-session">Ülés mentése</button>
   </div></div>`;
 }
 
@@ -1136,7 +1177,7 @@ const QUERIES = [
   { key: 'all', label: 'Havi kimutatás' },
   { key: 'cases', label: 'Alkalmak esetszámonként' },
   { key: 'noshow', label: 'Nem megjelenések' },
-  { key: 'types', label: 'Foglalkozás típusok' },
+  { key: 'types', label: 'Ülés típusok' },
   { key: 'ages', label: 'Életkori megoszlás' },
   { key: 'ai', label: 'AI lekérdezés' }
 ];
@@ -1193,7 +1234,7 @@ function runQuery() {
     res = {
       columns: [C('Esetszám'), C('Név'), C('Tervezett alkalmak', 1), C('Megtartva', 1), C('Nem jelent meg', 1),
         C('Még tervezett', 1), C('Összes az időszakban', 1), C('Hátralévő (összesen)', 1)],
-      rows: rows, summary: rows.length + ' eset foglalkozással az időszakban'
+      rows: rows, summary: rows.length + ' eset üléssel az időszakban'
     };
     res.totals = rows.length ? sumRow(res.columns, rows) : null;
 
@@ -1216,7 +1257,7 @@ function runQuery() {
     });
     res = {
       columns: [C('Típus'), C('Összes', 1), C('Megtartva', 1), C('Nem jelent meg', 1), C('Még tervezett', 1), C('Arány (%)', 1)],
-      rows: rows, summary: ss.length + ' foglalkozás típus szerint'
+      rows: rows, summary: ss.length + ' ülés típus szerint'
     };
     if (ss.length) { res.totals = sumRow(res.columns, rows); res.totals[5] = 100; } else { res.rows = []; }
 
@@ -1230,7 +1271,7 @@ function runQuery() {
       return [age, groups[age].length, l.length, cnt(l, ST.HELD), cnt(l, ST.NOSHOW), pct(groups[age].length, ids.length)];
     });
     res = {
-      columns: [C('Életkor'), C('Esetek száma', 1), C('Foglalkozások', 1), C('Megtartva', 1), C('Nem jelent meg', 1), C('Esetek aránya (%)', 1)],
+      columns: [C('Életkor'), C('Esetek száma', 1), C('Ülések', 1), C('Megtartva', 1), C('Nem jelent meg', 1), C('Esetek aránya (%)', 1)],
       rows: rows, summary: ids.length + ' eset az időszakban, életkori kategóriák szerint'
     };
     if (rows.length) { res.totals = sumRow(res.columns, rows); res.totals[5] = 100; }
@@ -1255,15 +1296,15 @@ function runQuery() {
     const unitCol = C('Egységár (HUF / 50 perc)', 1); unitCol.money = true;
     const totalCol = C('Össz. ár (HUF)', 1); totalCol.money = true;
     res = {
-      columns: [C('Esetszám / foglalkozások száma'), C('Óraszám (50 perc)', 1), unitCol, totalCol],
+      columns: [C('Esetszám / ülések száma'), C('Óraszám (50 perc)', 1), unitCol, totalCol],
       rows: rows,
-      summary: rows.length + ' eset, ' + list.length + ' foglalkozás (' + cnt(list, ST.HELD) + ' megtartva, ' + cnt(list, ST.NOSHOW) +
+      summary: rows.length + ' eset, ' + list.length + ' ülés (' + cnt(list, ST.HELD) + ' megtartva, ' + cnt(list, ST.NOSHOW) +
         ' nem jelent meg), ' + fmtNum(rows.reduce((a, r) => a + r[1], 0)) + ' db 50 perces óra, összesen ' +
         fmtMoney(rows.reduce((a, r) => a + r[3], 0)) + ' HUF (' + fmtMoney(price) + ' HUF / 50 perces alkalom)'
     };
     if (rows.length) {
       res.totals = sumRow(res.columns, rows);
-      res.totals[0] = 'Összesen (' + rows.length + ' eset / ' + list.length + ' foglalkozás)';
+      res.totals[0] = 'Összesen (' + rows.length + ' eset / ' + list.length + ' ülés)';
       res.totals[2] = '';
     }
   }
@@ -1315,7 +1356,7 @@ async function askAi() {
     const res = await call('aiQuery', { prompt: prompt, price: R.price });
     const r = res.result;
     R.aiAnswer = r.answer;
-    R.aiInfo = r.model + (r.fallback ? ' (tartalék modell, mert a fő modell túlterhelt volt)' : '') + ', ' + r.cases + ' eset és ' + r.sessions + ' foglalkozás alapján';
+    R.aiInfo = r.model + (r.fallback ? ' (tartalék modell, mert a fő modell túlterhelt volt)' : '') + ', ' + r.cases + ' eset és ' + r.sessions + ' ülés alapján';
   } catch (e) {
     R.aiError = e.message;
   }
@@ -1355,7 +1396,7 @@ function viewReports() {
     ${R.query === 'ai' ? `<section><h2>Kérdés</h2>
       <label class="fld"><textarea id="ai-prompt" rows="4" maxlength="4000" placeholder="pl. Melyik kategóriában a legmagasabb a nem megjelenések aránya?">${esc(R.aiPrompt)}</textarea></label>
       <button class="btn btn-primary btn-block" data-act="ai-ask" ${R.aiBusy ? 'disabled' : ''}>${R.aiBusy ? 'Gemini dolgozik…' : 'Kérdezés'}</button>
-      <div class="tablenote">A Gemini az összes esetet és foglalkozást megkapja, az ügyfelek neve, e-mail címe és telefonszáma nélkül.</div>
+      <div class="tablenote">A Gemini az összes esetet és ülést megkapja, az ügyfelek neve, e-mail címe és telefonszáma nélkül.</div>
     </section>` : ''}
     <section id="report">${reportHtml()}</section>
   </main>${nav('reports')}`;
@@ -1530,13 +1571,13 @@ function openSheet(html) {
 }
 function closeSheet() { $('#sheet').hidden = true; $('#sheet-panel').innerHTML = ''; }
 
-let toastTimer;
 function toast(msg, isErr) {
   const t = $('#toast');
-  t.textContent = msg; t.className = 'toast' + (isErr ? ' err' : ''); t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, isErr ? 5000 : 2200);
+  $('#toast-msg').textContent = msg;
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.hidden = false;   // addig marad, amíg be nem zárod
 }
+function closeToast() { const t = $('#toast'); if (t) t.hidden = true; }
 
 function sessionSheet(id) {
   const s = sessionById(id); if (!s) return;
@@ -1557,7 +1598,7 @@ function sessionSheet(id) {
       <a class="btn btn-ghost" href="#/session/${encodeURIComponent(id)}/edit" data-act="close-sheet">Szerkesztés</a>
       <a class="btn btn-ghost" href="#/case/${encodeURIComponent(s.Esetszam)}" data-act="close-sheet">Eset megnyitása</a>
     </div>
-    <div class="tablenote">Átütemezéshez a Szerkesztésben módosítsd az időpontot: így a foglalkozás csak egyszer szerepel.</div>`);
+    <div class="tablenote">Átütemezéshez a Szerkesztésben módosítsd az időpontot: így az ülés csak egyszer szerepel.</div>`);
 }
 
 function caseExpirySheet(id) {
@@ -1578,8 +1619,18 @@ function caseExpirySheet(id) {
     </div>`);
 }
 
+function caseStateSheet(id, to) {
+  const c = caseById(id); if (!c) return;
+  const closing = to === 'Lezárt';
+  openSheet(`<div class="sheet-h"><div><b>${closing ? 'Eset lezárása' : 'Eset újranyitása'}</b><span>${esc(c.Nev)} (${esc(c.Esetszam)}) státusza ${esc(to)} lesz.</span></div></div>
+    <div class="sheet-links">
+      <button class="btn btn-ghost" data-act="close-sheet">Mégse</button>
+      <button class="btn btn-primary" data-act="set-case-status" data-id="${esc(id)}" data-status="${esc(to)}">${closing ? 'Lezárás' : 'Újranyitás'}</button>
+    </div>`);
+}
+
 async function setCaseStatus(id, status, btn) {
-  $('#sheet-panel').querySelectorAll('.sbtn').forEach(b => (b.disabled = true));
+  $('#sheet-panel').querySelectorAll('button').forEach(b => (b.disabled = true));
   if (btn) btn.textContent = 'Mentés\u2026';
   try {
     await call('setCaseStatus', { Esetszam: id, Statusz: status });
@@ -1643,6 +1694,8 @@ async function saveCase(id, btn) {
     v.Esetszam = id;
   }
   v.WOS = $('input[name="WOS"]').checked;
+  const wd = $('input[name="WOS_megvan"]');
+  v.WOS_megvan = !!(v.WOS && wd && wd.checked);
   const fe = $('input[name="ElsoEmail"]');
   v.ElsoEmail = !!(fe && fe.checked);
   v.Nev = (v.Nev || '').trim();
@@ -1695,7 +1748,7 @@ async function saveSession(btn, force) {
 
   const cs = caseById(v.Esetszam), exp = cs ? expiryOf(cs) : '';
   if (exp && v.Datum > exp && !state.sessSkip.expiry) {
-    openSheet(`<div class="sheet-h"><div><b>Az eset lejárata után</b><span>${esc(cs.Nev)} esete ${esc(fmtFull(exp))} napon lejár, a foglalkozás ${esc(fmtFull(v.Datum))} napra van időzítve. Mégis mented?</span></div></div>
+    openSheet(`<div class="sheet-h"><div><b>Az eset lejárata után</b><span>${esc(cs.Nev)} esete ${esc(fmtFull(exp))} napon lejár, az ülés ${esc(fmtFull(v.Datum))} napra van időzítve. Mégis mented?</span></div></div>
       <div class="sheet-links">
         <button class="btn btn-ghost" data-act="close-sheet">Vissza</button>
         <button class="btn btn-primary" data-act="force-save" data-skip="expiry">Mégis mentem</button>
@@ -1722,10 +1775,10 @@ async function saveSession(btn, force) {
   try {
     const res = await call('saveSession', v);
     const m = res.result && res.result.meet;
-    if (m && m.error) toast('Foglalkozás mentve, de a Meet link nem készült el: ' + m.error, true);
-    else if (m && m.warning) toast('Foglalkozás mentve. ' + m.warning, true);
-    else if (m && m.action === 'created') toast('Foglalkozás mentve, Meet link létrehozva');
-    else toast('Foglalkozás mentve');
+    if (m && m.error) toast('Ülés mentve, de a Meet link nem készült el: ' + m.error, true);
+    else if (m && m.warning) toast('Ülés mentve. ' + m.warning, true);
+    else if (m && m.action === 'created') toast('Ülés mentve, Meet link létrehozva');
+    else toast('Ülés mentve');
     go('#/case/' + encodeURIComponent(v.Esetszam), true);
   } catch (e) {
     toast(e.message, true);
@@ -1761,6 +1814,8 @@ document.addEventListener('click', e => {
     case 'show-pending':
       state.sessFilter = 'pending'; go('#/sessions'); break;
     case 'open-session': sessionSheet(el.dataset.id); break;
+    case 'case-state': caseStateSheet(el.dataset.id, el.dataset.to); break;
+    case 'close-toast': closeToast(); break;
     case 'open-case-exp': caseExpirySheet(el.dataset.id); break;
     case 'set-case-status': setCaseStatus(el.dataset.id, el.dataset.status, el); break;
     case 'close-sheet': closeSheet(); break;
@@ -1825,7 +1880,13 @@ document.addEventListener('click', e => {
     }
     case 'pick-cat': {
       const inp = $('#cat-input');
-      if (inp) { inp.value = el.dataset.v; const sug = $('#cat-sug'); if (sug) sug.innerHTML = categorySuggestHtml(inp.value); }
+      if (inp) inp.value = el.dataset.v;
+      hideCatList();
+      break;
+    }
+    case 'cat-toggle': {
+      const box = $('#cat-list');
+      if (box && !box.hidden) hideCatList(); else showCatList(true);
       break;
     }
     case 'copy-link': {
@@ -1846,7 +1907,7 @@ document.addEventListener('input', e => {
     const n = Math.max(0, Math.round(Number(e.target.value) || 0));
     state.rep.price = n; ls.set('kn_price', String(n)); refreshReport();
   }
-  if (e.target.id === 'cat-input') { const sug = $('#cat-sug'); if (sug) sug.innerHTML = categorySuggestHtml(e.target.value); }
+  if (e.target.id === 'cat-input') showCatList(false);
   if (e.target.id === 'q') {
     state.q = e.target.value;
     clearTimeout(searchTimer);
@@ -1861,6 +1922,7 @@ document.addEventListener('input', e => {
 });
 
 document.addEventListener('change', e => {
+  if (e.target.name === 'WOS') { const b = $('#wos-done'); if (b) b.hidden = !e.target.checked; }
   if (e.target.name === 'Esetszam' || e.target.name === 'Datum') updateExpiryNote();
   if (e.target.name === 'Datum') syncPick();
   if (e.target.name === 'Kezdes' || e.target.name === 'Vege') refreshCal('pick');
@@ -1875,8 +1937,12 @@ document.addEventListener('change', e => {
   }
 });
 
+document.addEventListener('focusin', e => { if (e.target.id === 'cat-input') showCatList(!e.target.value); });
+document.addEventListener('focusout', e => { if (e.target.id === 'cat-input') setTimeout(hideCatList, 150); });
+document.addEventListener('mousedown', e => { if (e.target.closest && e.target.closest('.combo-item, .combo-btn')) e.preventDefault(); });
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
+  if (e.key === 'Escape') { if (!$('#sheet').hidden) closeSheet(); closeToast(); }
   if (e.key === 'Enter' && e.target.id === 'token') { e.preventDefault(); $('[data-act="login"]').click(); }
 });
 
