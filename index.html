@@ -239,6 +239,7 @@ input:disabled { opacity: 0.7; }
 .expnote { margin: 8px 2px 0; font-size: 14.5px; color: var(--muted); }
 .expnote.bad { color: var(--noshow); font-weight: 600; }
 .srow.late .srow-time b { color: var(--noshow); }
+.invtext { font-variant-numeric: tabular-nums; line-height: 1.5; overflow-wrap: anywhere; }
 .aianswer { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
 .row2 input[type=date] { padding: 12px 8px; font-size: 16px; }
 .combo { position: relative; }
@@ -376,7 +377,7 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxkNaJfhG6ZrIWbOq7ttDH1Bfd7CHh3-BMGYLw83-VVo9B7ekw9RZ_XQaCtIMS0O2mK/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbzbtv9ycpd0AhkA5BTvX1Mm1ZVZq0x3vT4sQ2xq9nBfQYPQSGynJhyPdLAo-I3Uq_9n/exec',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
@@ -1175,6 +1176,7 @@ function viewSessionForm(id, params) {
 /* ---------------- Lekérdezések ---------------- */
 const QUERIES = [
   { key: 'all', label: 'Havi kimutatás' },
+  { key: 'invoice', label: 'Számlázási megjegyzés' },
   { key: 'cases', label: 'Alkalmak esetszámonként' },
   { key: 'noshow', label: 'Nem megjelenések' },
   { key: 'types', label: 'Ülés típusok' },
@@ -1238,6 +1240,18 @@ function runQuery() {
     };
     res.totals = rows.length ? sumRow(res.columns, rows) : null;
 
+  } else if (key === 'invoice') {
+    // egyetlen összefüggő szöveg a számlázáshoz: <esetszám>/<megtartott és nem jelent meg ülések>;<következő esetszám>/...
+    const by = {};
+    ss.filter(s => s.Statusz === ST.HELD || s.Statusz === ST.NOSHOW).forEach(s => { by[s.Esetszam] = (by[s.Esetszam] || 0) + 1; });
+    const ids = Object.keys(by).sort((a, b) => a.localeCompare(b, 'hu'));
+    const text = ids.map(id => id + '/' + by[id]).join(';');
+    res = {
+      columns: [C('Számlázási megjegyzés')],
+      rows: text ? [[text]] : [],
+      text: text,
+      summary: ids.length + ' eset, ' + ids.reduce((a, id) => a + by[id], 0) + ' ülés (megtartott és nem jelent meg)'
+    };
   } else if (key === 'noshow') {
     const list = ss.filter(s => s.Statusz === ST.NOSHOW);
     const base = cnt(ss, ST.HELD) + list.length;
@@ -1319,6 +1333,15 @@ function reportHtml() {
   const q = QUERIES.find(x => x.key === state.rep.query);
   if (res.error) return `<div class="empty">${esc(res.error)}</div>`;
   if (!res.rows.length) return `<div class="rephead"><b>${esc(q.label)}</b></div><div class="empty" style="margin-top:10px">Nincs adat a kiválasztott időszakban.</div>`;
+  if (res.key === 'invoice') {
+    return `<div class="rephead"><b>${esc(q.label)}</b><span>${esc(res.summary)}</span></div>
+      <label class="fld" style="margin-top:10px"><textarea id="inv-text" class="invtext" readonly rows="4">${esc(res.text)}</textarea></label>
+      <button class="btn btn-primary btn-block" data-act="copy-inv">Szöveg másolása</button>
+      <div class="exports">
+        <button class="btn btn-ghost" data-act="export-csv">CSV letöltése</button>
+        <button class="btn btn-ghost" data-act="export-xlsx">Excel letöltése</button>
+      </div>`;
+  }
   const shown = res.rows.slice(0, REPORT_ROW_LIMIT);
   const th = res.columns.map(c => `<th class="${c.num ? 'num' : ''}">${esc(c.label)}</th>`).join('');
   const tr = r => r.map((v, i) => `<td class="${res.columns[i].num ? 'num' : ''}">${esc(typeof v === 'number' ? (res.columns[i].money ? fmtMoney(v) : fmtNum(v)) : v)}</td>`).join('');
@@ -1841,6 +1864,17 @@ document.addEventListener('click', e => {
     case 'query': state.rep.query = el.dataset.q; render(true); break;
     case 'export-csv': exportCurrent('csv'); break;
     case 'export-xlsx': exportCurrent('xlsx'); break;
+    case 'copy-inv': {
+      const r = runQuery();
+      const done = () => toast('A számlázási szöveg a vágólapra került');
+      const fallback = () => {
+        const ta = $('#inv-text');
+        try { if (ta) { ta.focus(); ta.select(); if (document.execCommand('copy')) { done(); return; } } } catch (e) {}
+        toast('A másolás nem sikerült, jelöld ki és másold a szöveget.', true);
+      };
+      if (r && r.text && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(r.text).then(done, fallback); else fallback();
+      break;
+    }
     case 'ai-ask': askAi(); break;
     case 'copy-ai': {
       const done = () => toast('A válasz a vágólapra került');
