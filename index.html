@@ -238,7 +238,10 @@ input:disabled { opacity: 0.7; }
 
 .expnote { margin: 8px 2px 0; font-size: 14.5px; color: var(--muted); }
 .expnote.bad { color: var(--noshow); font-weight: 600; }
+.expnote.warn { color: var(--resched); font-weight: 600; }
 .srow.late .srow-time b { color: var(--noshow); }
+.listblk h3, .tblhead { margin: 16px 0 6px; font-size: 16px; }
+.listblk .exports { margin: 10px 0 0; }
 .invtext { font-variant-numeric: tabular-nums; line-height: 1.5; overflow-wrap: anywhere; }
 .aianswer { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
 .row2 input[type=date] { padding: 12px 8px; font-size: 16px; }
@@ -377,7 +380,7 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbzbtv9ycpd0AhkA5BTvX1Mm1ZVZq0x3vT4sQ2xq9nBfQYPQSGynJhyPdLAo-I3Uq_9n/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxM3ZBy3bwQiJwLJBMe6amRKSIL-n_WiSa_g5Wfxbt0wreboQPq9BmtRukqx9mSj5IN/exec',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
@@ -412,8 +415,8 @@ const nowKey = () => todayStr() + ' ' + nowTime();
 const startKey = s => s.Datum + ' ' + s.Kezdes;
 const endKey = s => s.Datum + ' ' + s.Vege;
 
-/* Eset lejárata: a létrehozástól számított 6 hónap */
-const EXPIRY_MONTHS = 6;
+/* Eset lejárata: a kezdettől számított 3 hónap */
+const EXPIRY_MONTHS = 3;
 const EXPIRY_WARN_DAYS = 7;
 function addMonthsStr(str, n) {
   const p = str.split('-').map(Number);
@@ -491,6 +494,7 @@ const state = {
   authError: '',
   q: '',
   caseFilter: 'Aktív',
+  caseSort: 'next',
   sessFilter: 'upcoming',
   sessSkip: {},
   cal: { week: mondayOf(todayStr()) },
@@ -849,7 +853,7 @@ function viewHome() {
       <h2>Áttekintés</h2>
       <div class="card"><dl class="facts">
         <dt>Aktív esetek</dt><dd>${activeCases}</dd>
-        <dt>Összes eset</dt><dd>${d.cases.length}</dd>
+        <dt>Lezárt esetek</dt><dd>${d.cases.filter(c => c.Statusz === 'Lezárt').length}</dd>
       </dl></div>
     </section>
   </main>${nav('home')}`;
@@ -859,13 +863,16 @@ function viewHome() {
 function viewCases() {
   const d = state.data;
   const filters = ['Aktív', 'Lezárt', 'Mind'];
-  return `${topbar({ title: 'Esetek', sub: `${d.cases.length} eset`, right: refreshBtn() })}
+  return `${topbar({ title: 'Esetek', sub: `${d.cases.filter(c => c.Statusz === 'Aktív').length} aktív, ${d.cases.filter(c => c.Statusz === 'Lezárt').length} lezárt eset`, right: refreshBtn() })}
   ${errorBar()}
   <main>
     <a class="btn btn-primary btn-block topact" href="#/case/new">${icon('plus')} Új eset</a>
     <div class="search"><input type="search" id="q" placeholder="Keresés névre, esetszámra, telefonra…" value="${esc(state.q)}" autocomplete="off" enterkeyhint="search"></div>
     <div class="chips" role="group" aria-label="Szűrés státusz szerint">
       ${filters.map(f => `<button class="chip" data-act="case-filter" data-f="${f}" aria-pressed="${state.caseFilter === f}">${f}</button>`).join('')}
+    </div>
+    <div class="chips" role="group" aria-label="Rendezés">
+      ${[['next', 'Következő ülés'], ['az', 'A–Z'], ['za', 'Z–A']].map(o => `<button class="chip sm" data-act="case-sort" data-s="${o[0]}" aria-pressed="${state.caseSort === o[0]}">${o[1]}</button>`).join('')}
     </div>
     <section id="case-list">${caseListHtml()}</section>
   </main>${nav('cases')}`;
@@ -879,6 +886,8 @@ function caseListHtml() {
       [c.Nev, c.Esetszam, c.Telefonszam, c.Email, c.Kategoria, c.Eset_leirasa].some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
   }
   list = list.slice().sort((a, b) => {
+    if (state.caseSort === 'az') return a.Nev.localeCompare(b.Nev, 'hu');
+    if (state.caseSort === 'za') return b.Nev.localeCompare(a.Nev, 'hu');
     const an = a.stats.next ? startKey(a.stats.next) : '9999', bn = b.stats.next ? startKey(b.stats.next) : '9999';
     return an.localeCompare(bn) || a.Nev.localeCompare(b.Nev, 'hu');
   });
@@ -1105,10 +1114,15 @@ function sessionDefaults(caseId, fromId) {
 
 function expiryNoteHtml(esetszam, datum) {
   const c = caseById(esetszam);
-  const e = c ? expiryOf(c) : '';
-  if (!e) return '';
-  if (datum && datum > e) return `<div class="expnote bad">Figyelem: az eset ${esc(fmtFull(e))} napon lejár, a kiválasztott dátum ezután van.</div>`;
-  return `<div class="expnote">${daysUntil(e) < 0 ? 'Az eset lejárt' : 'Az eset lejár'}: ${esc(fmtFull(e))}</div>`;
+  if (!c) return '';
+  let html = '';
+  if (c.WOS && state.data.wosDoneEnabled && !c.WOS_megvan) {
+    html += '<div class="expnote warn">Figyelem: ehhez az esethez kell WOS, de még nincs meg.</div>';
+  }
+  const e = expiryOf(c);
+  if (!e) return html;
+  if (datum && datum > e) return html + `<div class="expnote bad">Figyelem: az eset ${esc(fmtFull(e))} napon lejár, a kiválasztott dátum ezután van.</div>`;
+  return html + `<div class="expnote">${daysUntil(e) < 0 ? 'Az eset lejárt' : 'Az eset lejár'}: ${esc(fmtFull(e))}</div>`;
 }
 function updateExpiryNote() {
   const box = $('#exp-note'), es = $('select[name="Esetszam"]'), dt = $('input[name="Datum"]');
@@ -1176,7 +1190,6 @@ function viewSessionForm(id, params) {
 /* ---------------- Lekérdezések ---------------- */
 const QUERIES = [
   { key: 'all', label: 'Havi kimutatás' },
-  { key: 'invoice', label: 'Számlázási megjegyzés' },
   { key: 'cases', label: 'Alkalmak esetszámonként' },
   { key: 'noshow', label: 'Nem megjelenések' },
   { key: 'types', label: 'Ülés típusok' },
@@ -1240,18 +1253,6 @@ function runQuery() {
     };
     res.totals = rows.length ? sumRow(res.columns, rows) : null;
 
-  } else if (key === 'invoice') {
-    // egyetlen összefüggő szöveg a számlázáshoz: <esetszám>/<megtartott és nem jelent meg ülések>;<következő esetszám>/...
-    const by = {};
-    ss.filter(s => s.Statusz === ST.HELD || s.Statusz === ST.NOSHOW).forEach(s => { by[s.Esetszam] = (by[s.Esetszam] || 0) + 1; });
-    const ids = Object.keys(by).sort((a, b) => a.localeCompare(b, 'hu'));
-    const text = ids.map(id => id + '/' + by[id]).join(';');
-    res = {
-      columns: [C('Számlázási megjegyzés')],
-      rows: text ? [[text]] : [],
-      text: text,
-      summary: ids.length + ' eset, ' + ids.reduce((a, id) => a + by[id], 0) + ' ülés (megtartott és nem jelent meg)'
-    };
   } else if (key === 'noshow') {
     const list = ss.filter(s => s.Statusz === ST.NOSHOW);
     const base = cnt(ss, ST.HELD) + list.length;
@@ -1302,7 +1303,10 @@ function runQuery() {
     const units = s => Math.max(0.5, Math.round(mins(s) / SESSION_MINUTES * 2) / 2);
     const by = {};
     list.forEach(s => (by[s.Esetszam] = by[s.Esetszam] || []).push(s));
-    const rows = Object.keys(by).sort((x, y) => x.localeCompare(y, 'hu')).map(id => {
+    // a "_24"-re végződő esetazonosítók a lista végére kerülnek
+    const tail = id => /_24$/.test(id) ? 1 : 0;
+    const ids = Object.keys(by).sort((x, y) => tail(x) - tail(y) || x.localeCompare(y, 'hu'));
+    const rows = ids.map(id => {
       const l = by[id];
       const hours = l.reduce((a, s) => a + units(s), 0);
       return [id + ' / ' + l.length, hours, price, hours * price];
@@ -1321,10 +1325,35 @@ function runQuery() {
       res.totals[0] = 'Összesen (' + rows.length + ' eset / ' + list.length + ' ülés)';
       res.totals[2] = '';
     }
+    res.list = ids.map(id => ({ id: id, count: by[id].length }));
+    res.textSemi = res.list.map(x => x.id + '/' + x.count).join(';');
+    res.textLines = res.list.map(x => x.id + '/' + x.count).join('\n');
   }
   res.key = key; res.range = r;
   if (!res.totals) res.totals = null;
   return res;
+}
+
+function listBlocksHtml(res) {
+  const box = (k, title, text, n) => `<div class="listblk"><h3>${title}</h3>
+    <textarea id="txt-${k}" class="invtext" readonly rows="${n}">${esc(text)}</textarea>
+    <div class="exports">
+      <button class="btn btn-primary" data-act="copy-text" data-k="${k}">Másolás</button>
+      <button class="btn btn-ghost" data-act="txt-text" data-k="${k}">TXT letöltése</button>
+    </div></div>`;
+  return box('semi', 'Felsorolás, pontosvesszővel elválasztva', res.textSemi, 3) +
+    box('lines', 'Felsorolás, soronként', res.textLines, Math.min(Math.max(res.list.length, 3), 10)) +
+    `<h3 class="tblhead">Részletes táblázat</h3>`;
+}
+
+function copyText(text, taId, okMsg) {
+  const done = () => toast(okMsg);
+  const fallback = () => {
+    const ta = taId && $('#' + taId);
+    try { if (ta) { ta.focus(); ta.select(); if (document.execCommand('copy')) { done(); return; } } } catch (e) {}
+    toast('A másolás nem sikerült, jelöld ki és másold a szöveget.', true);
+  };
+  if (text && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
 }
 
 function reportHtml() {
@@ -1333,19 +1362,11 @@ function reportHtml() {
   const q = QUERIES.find(x => x.key === state.rep.query);
   if (res.error) return `<div class="empty">${esc(res.error)}</div>`;
   if (!res.rows.length) return `<div class="rephead"><b>${esc(q.label)}</b></div><div class="empty" style="margin-top:10px">Nincs adat a kiválasztott időszakban.</div>`;
-  if (res.key === 'invoice') {
-    return `<div class="rephead"><b>${esc(q.label)}</b><span>${esc(res.summary)}</span></div>
-      <label class="fld" style="margin-top:10px"><textarea id="inv-text" class="invtext" readonly rows="4">${esc(res.text)}</textarea></label>
-      <button class="btn btn-primary btn-block" data-act="copy-inv">Szöveg másolása</button>
-      <div class="exports">
-        <button class="btn btn-ghost" data-act="export-csv">CSV letöltése</button>
-        <button class="btn btn-ghost" data-act="export-xlsx">Excel letöltése</button>
-      </div>`;
-  }
   const shown = res.rows.slice(0, REPORT_ROW_LIMIT);
   const th = res.columns.map(c => `<th class="${c.num ? 'num' : ''}">${esc(c.label)}</th>`).join('');
   const tr = r => r.map((v, i) => `<td class="${res.columns[i].num ? 'num' : ''}">${esc(typeof v === 'number' ? (res.columns[i].money ? fmtMoney(v) : fmtNum(v)) : v)}</td>`).join('');
   return `<div class="rephead"><b>${esc(q.label)}</b><span>${esc(res.summary)}</span></div>
+    ${res.key === 'all' ? listBlocksHtml(res) : ''}
     <div class="exports">
       <button class="btn btn-ghost" data-act="export-csv">CSV letöltése</button>
       <button class="btn btn-primary" data-act="export-xlsx">Excel letöltése</button>
@@ -1832,6 +1853,11 @@ document.addEventListener('click', e => {
       document.querySelectorAll('[data-act="case-filter"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === state.caseFilter)));
       $('#case-list').innerHTML = caseListHtml();
       break;
+    case 'case-sort':
+      state.caseSort = el.dataset.s;
+      document.querySelectorAll('[data-act="case-sort"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === state.caseSort)));
+      $('#case-list').innerHTML = caseListHtml();
+      break;
     case 'sess-filter':
       state.sessFilter = el.dataset.f; render(); break;
     case 'show-pending':
@@ -1864,15 +1890,18 @@ document.addEventListener('click', e => {
     case 'query': state.rep.query = el.dataset.q; render(true); break;
     case 'export-csv': exportCurrent('csv'); break;
     case 'export-xlsx': exportCurrent('xlsx'); break;
-    case 'copy-inv': {
-      const r = runQuery();
-      const done = () => toast('A számlázási szöveg a vágólapra került');
-      const fallback = () => {
-        const ta = $('#inv-text');
-        try { if (ta) { ta.focus(); ta.select(); if (document.execCommand('copy')) { done(); return; } } } catch (e) {}
-        toast('A másolás nem sikerült, jelöld ki és másold a szöveget.', true);
-      };
-      if (r && r.text && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(r.text).then(done, fallback); else fallback();
+    case 'copy-text': {
+      const r = runQuery(), k = el.dataset.k;
+      copyText(k === 'semi' ? r.textSemi : r.textLines, 'txt-' + k, 'A szöveg a vágólapra került');
+      break;
+    }
+    case 'txt-text': {
+      const r = runQuery(), k = el.dataset.k;
+      if (!r || !r.list || !r.list.length) { toast('Nincs exportálható adat.', true); break; }
+      const body = (k === 'semi' ? r.textSemi : r.textLines).replace(/\n/g, '\r\n') + '\r\n';
+      downloadBlob('konzultacio_havi_' + (k === 'semi' ? 'pontosvesszos' : 'soronkent') + '_' + r.range.from + '_' + r.range.to + '.txt',
+        new Blob([body], { type: 'text/plain;charset=utf-8' }));
+      toast('Fájl letöltése elindult');
       break;
     }
     case 'ai-ask': askAi(); break;
