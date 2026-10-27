@@ -141,6 +141,7 @@ h2 small { font-size: 14px; font-weight: 600; color: var(--muted); }
 .rail { display: flex; gap: 4px; margin: 10px 0 6px; }
 .rail i { flex: 1 1 0; min-width: 4px; height: 12px; border-radius: 4px; border: 1.5px solid var(--line); }
 .rail i.held { background: var(--held); border-color: var(--held); }
+.rail i.noshow { background: var(--noshow-soft); border-color: var(--noshow); }
 .rail i.sched { background: var(--plan-soft); border-color: var(--plan); }
 .rail-note { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 14.5px; color: var(--muted); }
 .rail-note b { color: var(--ink); font-weight: 700; }
@@ -242,6 +243,13 @@ input:disabled { opacity: 0.7; }
 .srow.late .srow-time b { color: var(--noshow); }
 .listblk h3, .tblhead { margin: 16px 0 6px; font-size: 16px; }
 .listblk .exports { margin: 10px 0 0; }
+.srow.static { cursor: default; }
+.srow.static:active { background: var(--surface); }
+.btn.sm { min-height: 44px; padding: 0 16px; font-size: 15px; }
+.fulist { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px; }
+.fulist div { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.fulist div:last-child { border-bottom: 0; }
+.fulist span { color: var(--muted); font-size: 14.5px; }
 .invtext { font-variant-numeric: tabular-nums; line-height: 1.5; overflow-wrap: anywhere; }
 .aianswer { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
 .row2 input[type=date] { padding: 12px 8px; font-size: 16px; }
@@ -380,7 +388,7 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxM3ZBy3bwQiJwLJBMe6amRKSIL-n_WiSa_g5Wfxbt0wreboQPq9BmtRukqx9mSj5IN/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbyb-OhlfTVArb0w3Hyf4koi_xBx5EeBw2gdqta4ncyIVonRP_GAWJi9PFnLzA2f0vPH/exec',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
@@ -620,17 +628,17 @@ function errorBar() {
 
 function rail(c) {
   const planned = c.Tervezett_alkalmak, s = c.stats;
-  if (!planned && !s.held) return `<div class="rail-note">Nincs megadva tervezett alkalomszám.</div>`;
-  const total = Math.max(planned, s.held);
+  const used = s.held + s.noShow;   // a nem megjelent ülés is elhasznál egy alkalmat
+  if (!planned && !used) return `<div class="rail-note">Nincs megadva tervezett alkalomszám.</div>`;
+  const total = Math.max(planned, used);
   let segs = '';
   for (let i = 0; i < total; i++) {
-    const cls = i < s.held ? 'held' : i < s.held + s.scheduled ? 'sched' : '';
+    const cls = i < s.held ? 'held' : i < used ? 'noshow' : i < used + s.scheduled ? 'sched' : '';
     segs += `<i class="${cls}"></i>`;
   }
-  const extra =
-    (s.noShow ? `<span class="mini b-noshow">${s.noShow} nem jelent meg</span>` : '');
-  return `<div class="rail" role="img" aria-label="${s.held} megtartva ${planned} alkalomból">${segs}</div>
-    <div class="rail-note"><span><b>${s.held}</b> / ${planned} megtartva</span><span>${s.remaining} hátra</span>${extra}</div>`;
+  const extra = s.noShow ? `<span class="mini b-noshow">${s.noShow} nem jelent meg</span>` : '';
+  return `<div class="rail" role="img" aria-label="${used} ülés ${planned} alkalomból">${segs}</div>
+    <div class="rail-note"><span><b>${used}</b> / ${planned} ülés</span><span>${s.remaining} hátra</span>${extra}</div>`;
 }
 
 function wosTag(c) {
@@ -820,6 +828,7 @@ function viewHome() {
   const pending = pendingSessions();
   const activeCases = d.cases.filter(c => c.Statusz === 'Aktív').length;
   const expiring = expiringCases();
+  const fu = followUpCandidates();
   return `${topbar({ title: 'Mai nap', sub: esc(fmtLong(t)), right: refreshBtn() })}
   ${errorBar()}
   <main>
@@ -832,6 +841,12 @@ function viewHome() {
     ${expiring.length ? `<section>
       <h2>Lejáró esetek <small>${EXPIRY_WARN_DAYS} napon belül</small></h2>
       <div class="list">${expiring.map(expiringRow).join('')}</div>
+    </section>` : ''}
+    ${fu.withEmail.length ? `<section>
+      <h2>Nincs következő ülés <small>${fu.withEmail.length} eset</small></h2>
+      <div class="list">${fu.withEmail.map(followUpRow).join('')}</div>
+      ${fu.withEmail.length > 1 ? `<button class="btn btn-primary btn-block" style="margin-top:10px" data-act="followup-all">Folytatás-egyeztető levél mindenkinek (${fu.withEmail.length})</button>` : ''}
+      ${fu.noEmail ? `<div class="tablenote">További ${fu.noEmail} esetnél nincs e-mail cím.</div>` : ''}
     </section>` : ''}
     <section>
       <h2>Ma <small>${today.length} ülés</small></h2>
@@ -942,6 +957,7 @@ function viewCase(id) {
         ? `<button class="btn btn-ghost btn-block" data-act="case-state" data-id="${esc(id)}" data-to="Aktív">Eset újranyitása</button>`
         : `<button class="btn btn-ghost btn-block" data-act="case-state" data-id="${esc(id)}" data-to="Lezárt">Eset lezárása</button>`}
     </section>
+    ${followUpOk(c) && c.Email ? `<section><button class="btn btn-ghost btn-block" data-act="followup-one" data-id="${esc(id)}">Folytatás-egyeztető levél küldése</button></section>` : ''}
     <section>
       <h2>Ülések <small>${sess.length} alkalom</small></h2>
       ${sess.length
@@ -1017,6 +1033,73 @@ function showCatList(showAll) {
   box.innerHTML = html; box.hidden = !html;
 }
 function hideCatList() { const box = $('#cat-list'); if (box) box.hidden = true; }
+
+/* Folytatás-egyeztető levél: azoknak az aktív eseteknek, ahol nincs következő ülés megbeszélve */
+const FOLLOWUP_SUBJECT = 'EAP tanácsadás – folytatás egyeztetése';   // csak a megjelenítéshez; a valódi tárgy a Code.gs-ben van
+function greetingName(nev) {
+  const titles = ['dr', 'prof', 'id', 'ifj', 'özv', 'néhai'];
+  const t = String(nev || '').trim().split(/\s+/).filter(w => w && titles.indexOf(w.toLowerCase().replace(/\.$/, '')) < 0);
+  if (!t.length) return String(nev || '').trim();
+  if (t.length === 1) return t[0];
+  if (t.length >= 3 && /né$/i.test(t[0])) return t[2];   // Kissné Nagy Anna > Anna
+  return t[1];                                           // Kiss Anna > Anna
+}
+function followUpOk(c) {
+  return c.Statusz === 'Aktív' && !c.stats.next && (c.stats.held + c.stats.noShow) > 0;
+}
+function followUpCandidates() {
+  const base = state.data.cases.filter(followUpOk).sort((a, b) => a.Nev.localeCompare(b.Nev, 'hu'));
+  return { withEmail: base.filter(c => c.Email), noEmail: base.filter(c => !c.Email).length };
+}
+const sentDate = c => (state.data.followUpTracking && /^\d{4}-\d{2}-\d{2}/.test(c.Folytatas_level || '')) ? c.Folytatas_level.slice(0, 10) : '';
+function followUpRow(c) {
+  const sd = sentDate(c);
+  return `<div class="srow static">
+    <span class="srow-main"><span class="srow-name">${esc(c.Nev)}</span>
+      <span class="srow-meta">${esc(c.Esetszam)}${sd ? ', levél: ' + esc(fmtShort(sd)) : ''}</span></span>
+    <button class="btn btn-ghost sm" data-act="followup-one" data-id="${esc(c.Esetszam)}">Levél</button>
+  </div>`;
+}
+function followUpSheet(ids) {
+  const cs = ids.map(caseById).filter(Boolean);
+  if (!cs.length) return;
+  const recent = cs.filter(c => { const d = sentDate(c); return d && (Date.now() - parseD(d).getTime()) < 14 * 86400000; });
+  const warn = recent.length
+    ? `<div class="notice" style="margin-bottom:12px"><span>${cs.length === 1 ? 'Erre az esetre ' + esc(fmtShort(sentDate(recent[0]))) + ' napon már ment ilyen levél.' : recent.length + ' eset az elmúlt 14 napban már kapott ilyen levelet.'}</span></div>` : '';
+  const head = `<div class="sheet-h">
+      <div><b>Folytatás-egyeztető levél</b><span>${cs.length === 1 ? esc(cs[0].Nev) + ', ' + esc(cs[0].Email) : cs.length + ' eset'}</span></div>
+      <button class="iconbtn" data-act="close-sheet" aria-label="Bezárás">${icon('x')}</button>
+    </div>`;
+  const foot = `<div class="sheet-links">
+      <button class="btn btn-ghost" data-act="close-sheet">Mégse</button>
+      <button class="btn btn-primary" data-act="followup-send" data-ids="${esc(cs.map(c => c.Esetszam).join('|'))}">Küldés${cs.length > 1 ? ' (' + cs.length + ')' : ''}</button>
+    </div>`;
+  if (cs.length === 1) {
+    openSheet(head + warn + `<label class="fld"><span>Megszólítás</span><input type="text" id="fu-name" value="${esc(greetingName(cs[0].Nev))}"></label>
+      <div class="tablenote" style="margin:-6px 0 14px">A levél így indul: „Kedves …,”. Tárgy: ${esc(FOLLOWUP_SUBJECT)}. Ha a név nem a keresztnév, javítsd itt.</div>` + foot);
+  } else {
+    openSheet(head + warn + `<div class="fulist">${cs.map(c => `<div><b>Kedves ${esc(greetingName(c.Nev))},</b> <span>${esc(c.Email)}</span></div>`).join('')}</div>
+      <div class="tablenote" style="margin:8px 0 14px">Tárgy: ${esc(FOLLOWUP_SUBJECT)}. A megszólítás a névből készül; ha egy név nem stimmel, küldd el egyenként.</div>` + foot);
+  }
+}
+async function sendFollowUps(ids, btn) {
+  const items = ids.map(id => ({ Esetszam: id }));
+  if (ids.length === 1) { const inp = $('#fu-name'); if (inp && inp.value.trim()) items[0].Megszolitas = inp.value.trim(); }
+  $('#sheet-panel').querySelectorAll('button').forEach(b => (b.disabled = true));
+  if (btn) btn.textContent = 'Küldés\u2026';
+  try {
+    const res = await call('sendFollowUp', { items: items });
+    const list = res.result || [];
+    const ok = list.filter(r => r.sent).length, bad = list.filter(r => r.error);
+    closeSheet();
+    if (bad.length) toast((ok ? ok + ' levél elment, ' : '') + bad.length + ' nem: ' + bad.map(r => r.Esetszam + ': ' + r.error).join('; '), true);
+    else toast(ok === 1 ? 'A levél elment: ' + ((caseById(ids[0]) || {}).Nev || '') : ok + ' levél elment');
+    if (!isFormRoute()) render(true);
+  } catch (e) {
+    closeSheet();
+    toast(e.message, true);
+  }
+}
 
 /* Eset űrlap */
 function phoneField(ph) {
@@ -1863,6 +1946,9 @@ document.addEventListener('click', e => {
     case 'show-pending':
       state.sessFilter = 'pending'; go('#/sessions'); break;
     case 'open-session': sessionSheet(el.dataset.id); break;
+    case 'followup-one': followUpSheet([el.dataset.id]); break;
+    case 'followup-all': followUpSheet(followUpCandidates().withEmail.map(c => c.Esetszam)); break;
+    case 'followup-send': sendFollowUps(el.dataset.ids.split('|'), el); break;
     case 'case-state': caseStateSheet(el.dataset.id, el.dataset.to); break;
     case 'close-toast': closeToast(); break;
     case 'open-case-exp': caseExpirySheet(el.dataset.id); break;
