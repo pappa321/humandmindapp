@@ -243,6 +243,16 @@ input:disabled { opacity: 0.7; }
 .srow.late .srow-time b { color: var(--noshow); }
 .listblk h3, .tblhead { margin: 16px 0 6px; font-size: 16px; }
 .listblk .exports { margin: 10px 0 0; }
+.mstrip { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.mbar { display: flex; align-items: center; gap: 2px; flex: 0 1 112px; height: 5px; }
+.mbar i { flex: 1 1 0; min-width: 3px; height: 5px; border-radius: 3px; background: var(--line); }
+.mbar i.held { background: var(--held); }
+.mbar i.noshow { background: var(--noshow); }
+.mbar i.plan { background: var(--plan); opacity: 0.55; }
+.mbar i.cur { height: 10px; opacity: 1; }
+.mbar.prop { display: block; background: var(--line); border-radius: 3px; overflow: hidden; }
+.mbar.prop i { display: block; height: 5px; background: var(--plan); }
+.mtxt { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .srow.static { cursor: default; }
 .srow.static:active { background: var(--surface); }
 .btn.sm { min-height: 44px; padding: 0 16px; font-size: 15px; }
@@ -388,7 +398,7 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbyb-OhlfTVArb0w3Hyf4koi_xBx5EeBw2gdqta4ncyIVonRP_GAWJi9PFnLzA2f0vPH/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycby4pq8zDSNyiP8yXNric1jXnDIap4r1XULPWFpzcEquhQnOuGa8mZgUdeli_b8RTUNp/exec',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
@@ -682,6 +692,21 @@ function caseCard(c) {
   </a>`;
 }
 
+/* Hányadik ülés az esetben: vékony csík + "3/6" felirat */
+function seqStrip(s) {
+  const c = caseById(s.Esetszam);
+  if (!c) return '';
+  const list = sessionsOf(s.Esetszam);
+  const idx = list.findIndex(x => x.Foglalkozas_ID === s.Foglalkozas_ID);
+  if (idx < 0) return '';
+  const total = Math.max(c.Tervezett_alkalmak, list.length);
+  const cls = x => x.Statusz === ST.HELD ? 'held' : x.Statusz === ST.NOSHOW ? 'noshow' : 'plan';
+  const bar = total <= 12
+    ? `<span class="mbar">${Array.from({ length: total }, (_, i) => i < list.length ? `<i class="${cls(list[i])}${i === idx ? ' cur' : ''}"></i>` : '<i></i>').join('')}</span>`
+    : `<span class="mbar prop"><i style="width:${Math.round((idx + 1) / total * 100)}%"></i></span>`;
+  return `<span class="mstrip">${bar}<span class="mtxt">${idx + 1}/${total}</span></span>`;
+}
+
 function sessionRow(s, mode) {
   const c = caseById(s.Esetszam);
   const dim = '';
@@ -696,7 +721,7 @@ function sessionRow(s, mode) {
   return `<button class="srow${dim}" data-act="open-session" data-id="${esc(s.Foglalkozas_ID)}">
     <span class="srow-time"><b>${esc(s.Kezdes)}</b><i>${esc(s.Vege)}</i></span>
     <span class="srow-main"><span class="srow-name">${esc(c ? c.Nev : s.Esetszam)}</span>
-      <span class="srow-meta">${typeIcon(s.Tipus)} ${esc(s.Tipus)}${meetUrl(s) ? ' <span class="mini b-plan">Meet</span>' : ''}</span></span>
+      <span class="srow-meta">${typeIcon(s.Tipus)} ${esc(s.Tipus)}${meetUrl(s) ? ' <span class="mini b-plan">Meet</span>' : ''}</span>${seqStrip(s)}</span>
     ${badge(s.Statusz)}
   </button>`;
 }
@@ -823,8 +848,18 @@ function syncPick() {
 /* Kezdőlap */
 function viewHome() {
   const d = state.data, t = todayStr();
-  const today = d.sessions.filter(s => s.Datum === t);
-  const week = d.sessions.filter(s => s.Datum > t && s.Datum <= addDays(t, 7) && s.Statusz === ST.PLANNED);
+  const planned = d.sessions.filter(s => s.Statusz === ST.PLANNED);   // a megtartott és a nem megjelent ülést nem mutatjuk
+  let shownDate = t;
+  let today = planned.filter(s => s.Datum === t);
+  if (!today.length) {                                                // mára nincs több ülés: a legközelebbi nap ülései
+    const nd = planned.filter(s => s.Datum > t).map(s => s.Datum).sort()[0];
+    if (nd) { shownDate = nd; today = planned.filter(s => s.Datum === nd); }
+  }
+  const wd = parseD(shownDate).toLocaleDateString('hu-HU', { weekday: 'long' });
+  const todayTitle = shownDate === t ? 'Ma'
+    : shownDate === addDays(t, 1) ? 'Holnap, ' + wd + ', ' + fmtShort(shownDate)
+    : wd.charAt(0).toUpperCase() + wd.slice(1) + ', ' + fmtShort(shownDate);
+  const week = planned.filter(s => s.Datum > t && s.Datum <= addDays(t, 7) && s.Datum !== shownDate);
   const pending = pendingSessions();
   const activeCases = d.cases.filter(c => c.Statusz === 'Aktív').length;
   const expiring = expiringCases();
@@ -843,10 +878,10 @@ function viewHome() {
       <div class="list">${expiring.map(expiringRow).join('')}</div>
     </section>` : ''}
     <section>
-      <h2>Ma <small>${today.length} ülés</small></h2>
+      <h2>${esc(todayTitle)} <small>${today.length} ülés</small></h2>
       ${today.length
         ? `<div class="list">${today.map(s => sessionRow(s, 'day')).join('')}</div>`
-        : `<div class="empty">Ma nincs ülés.</div>`}
+        : `<div class="empty">Nincs közelgő ülés.</div>`}
     </section>
     <section>
       <h2>Heti naptár</h2>
@@ -856,7 +891,7 @@ function viewHome() {
       <h2>Következő 7 nap <small>${week.length} tervezett</small></h2>
       ${week.length
         ? groupedSessions(week.slice(0, 8))
-        : `<div class="empty">A következő héten nincs tervezett ülés.</div>`}
+        : `<div class="empty">A következő héten nincs további tervezett ülés.</div>`}
     </section>
     ${fu.withEmail.length ? `<section>
       <h2>Nincs következő ülés <small>${fu.withEmail.length} eset</small></h2>
@@ -890,8 +925,10 @@ function caseListHtml() {
   const q = state.q.trim().toLowerCase();
   let list = state.data.cases.filter(c => state.caseFilter === 'Mind' || c.Statusz === state.caseFilter);
   if (q) {
-    list = state.data.cases.filter(c =>
-      [c.Nev, c.Esetszam, c.Telefonszam, c.Email, c.Kategoria, c.Eset_leirasa].some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
+    // a keresés a kiválasztott státuszszűrőn belül keres (a "Mind" szűrővel minden esetben)
+    list = list.filter(c =>
+      [c.Nev, c.Esetszam, c.Telefonszam, formatPhone(c.Telefonszam), c.Email, c.Kategoria, c.Eset_leirasa]
+        .some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
   }
   list = list.slice().sort((a, b) => {
     if (state.caseSort === 'az') return a.Nev.localeCompare(b.Nev, 'hu');
@@ -901,7 +938,7 @@ function caseListHtml() {
   });
   if (!list.length) {
     return q
-      ? `<div class="empty">Nincs találat erre: „${esc(state.q)}”. A keresés minden státuszban keres.</div>`
+      ? `<div class="empty">Nincs találat erre: „${esc(state.q)}”${state.caseFilter === 'Mind' ? '' : ' (' + esc(state.caseFilter) + ' esetek között)'}.${state.caseFilter === 'Mind' ? '' : ' A „Mind” szűrővel minden esetben keres.'}</div>`
       : `<div class="empty">Ebben a státuszban nincs eset.</div>`;
   }
   return `<div class="list">${list.map(caseCard).join('')}</div>`;
