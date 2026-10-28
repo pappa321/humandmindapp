@@ -1,6 +1,6 @@
 // Egyszerű service worker: az alkalmazás keretét (HTML, ikonok) gyorsítótárazza.
 // Az Apps Script hívásokat (más eredet, POST) sosem érinti, az adatok mindig frissek.
-const CACHE = 'konzultaciok-v1';
+const CACHE = 'konzultaciok-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
