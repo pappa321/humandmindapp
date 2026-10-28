@@ -388,7 +388,7 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbyb-OhlfTVArb0w3Hyf4koi_xBx5EeBw2gdqta4ncyIVonRP_GAWJi9PFnLzA2f0vPH/exec',
+  API_URL: 'IDE_MASOLD_A_WEB_APP_URL-T',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
@@ -829,7 +829,7 @@ function viewHome() {
   const activeCases = d.cases.filter(c => c.Statusz === 'Aktív').length;
   const expiring = expiringCases();
   const fu = followUpCandidates();
-  return `${topbar({ title: 'Mai nap', sub: esc(fmtLong(t)), right: refreshBtn() })}
+  return `${topbar({ title: 'Mai nap', sub: `${esc(fmtLong(t))}, ${activeCases} aktív eset`, right: refreshBtn() })}
   ${errorBar()}
   <main>
     <section class="actions2">
@@ -841,12 +841,6 @@ function viewHome() {
     ${expiring.length ? `<section>
       <h2>Lejáró esetek <small>${EXPIRY_WARN_DAYS} napon belül</small></h2>
       <div class="list">${expiring.map(expiringRow).join('')}</div>
-    </section>` : ''}
-    ${fu.withEmail.length ? `<section>
-      <h2>Nincs következő ülés <small>${fu.withEmail.length} eset</small></h2>
-      <div class="list">${fu.withEmail.map(followUpRow).join('')}</div>
-      ${fu.withEmail.length > 1 ? `<button class="btn btn-primary btn-block" style="margin-top:10px" data-act="followup-all">Folytatás-egyeztető levél mindenkinek (${fu.withEmail.length})</button>` : ''}
-      ${fu.noEmail ? `<div class="tablenote">További ${fu.noEmail} esetnél nincs e-mail cím.</div>` : ''}
     </section>` : ''}
     <section>
       <h2>Ma <small>${today.length} ülés</small></h2>
@@ -864,13 +858,12 @@ function viewHome() {
         ? groupedSessions(week.slice(0, 8))
         : `<div class="empty">A következő héten nincs tervezett ülés.</div>`}
     </section>
-    <section>
-      <h2>Áttekintés</h2>
-      <div class="card"><dl class="facts">
-        <dt>Aktív esetek</dt><dd>${activeCases}</dd>
-        <dt>Lezárt esetek</dt><dd>${d.cases.filter(c => c.Statusz === 'Lezárt').length}</dd>
-      </dl></div>
-    </section>
+    ${fu.withEmail.length ? `<section>
+      <h2>Nincs következő ülés <small>${fu.withEmail.length} eset</small></h2>
+      <div class="list">${fu.withEmail.map(followUpRow).join('')}</div>
+      ${fu.withEmail.length > 1 ? `<button class="btn btn-primary btn-block" style="margin-top:10px" data-act="followup-all">Folytatás-egyeztető levél mindenkinek (${fu.withEmail.length})</button>` : ''}
+      ${fu.noEmail ? `<div class="tablenote">További ${fu.noEmail} esetnél nincs e-mail cím.</div>` : ''}
+    </section>` : ''}
   </main>${nav('home')}`;
 }
 
