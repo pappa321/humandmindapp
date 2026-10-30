@@ -243,6 +243,16 @@ input:disabled { opacity: 0.7; }
 .srow.late .srow-time b { color: var(--noshow); }
 .listblk h3, .tblhead { margin: 16px 0 6px; font-size: 16px; }
 .listblk .exports { margin: 10px 0 0; }
+.hours { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hourbtn { min-height: 54px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); font-weight: 700; font-size: 17px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.hourbtn.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.hourbtn.busy, .hourbtn:disabled { background: var(--cancel-soft); border-color: var(--cancel-soft); color: var(--cancel); cursor: not-allowed; opacity: 0.85; }
+.hourbtn small { font-size: 11px; font-weight: 600; }
+.pickfield { min-height: 54px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.pickfield .muted { color: var(--muted); }
+.cal-col.selday { background: var(--brand-soft); }
+.cal-dh.selday b { outline: 2px solid var(--brand); border-radius: 999px; }
+button.cal-dh { border: 0; border-bottom: 1px solid var(--line); background: transparent; font: inherit; color: inherit; cursor: pointer; }
 .mstrip { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .mbar { display: flex; align-items: center; gap: 2px; flex: 0 1 112px; height: 5px; }
 .mbar i { flex: 1 1 0; min-width: 3px; height: 5px; border-radius: 3px; background: var(--line); }
@@ -398,7 +408,7 @@ input:disabled { opacity: 0.7; }
    BEÁLLÍTÁS – ide másold be az Apps Script web app /exec URL-jét
    ================================================================ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycby4pq8zDSNyiP8yXNric1jXnDIap4r1XULPWFpzcEquhQnOuGa8mZgUdeli_b8RTUNp/exec',
+  API_URL: 'IDE_MASOLD_A_WEB_APP_URL-T',
   CACHE_DATA: true   // az utolsó adatokat eltárolja a telefonon a gyorsabb induláshoz
 };
 const AGE_OPTIONS = ['18–19', '20–29', '30–39', '40–49', '50–59', '60–69', '70+'];
@@ -787,9 +797,14 @@ function calendarHtml(kind, o) {
   h0 = Math.max(0, h0); h1 = Math.min(24, h1);
   const rows = h1 - h0, t = todayStr(), nowM = toMin(nowTime());
   const rh = kind === 'home' ? 44 : 38;
+  const selDay = kind === 'pick' && o.sel ? o.sel.date : '';
   const heads = days.map(d => {
     const dt = parseD(d);
-    return `<div class="cal-dh ${d === t ? 'today' : ''}"><span>${esc(dt.toLocaleDateString('hu-HU', { weekday: 'short' }))}</span><b>${dt.getDate()}</b></div>`;
+    const inner = `<span>${esc(dt.toLocaleDateString('hu-HU', { weekday: 'short' }))}</span><b>${dt.getDate()}</b>`;
+    const cls = 'cal-dh' + (d === t ? ' today' : '') + (d === selDay ? ' selday' : '');
+    return kind === 'pick'
+      ? `<button type="button" class="${cls} dhbtn" data-act="cal-slot" data-k="pick" data-date="${d}">${inner}</button>`
+      : `<div class="${cls}">${inner}</div>`;
   }).join('');
   const times = Array.from({ length: rows }, (_, i) => `<div>${pad(h0 + i)}:00</div>`).join('');
   const cols = days.map(d => {
@@ -798,23 +813,23 @@ function calendarHtml(kind, o) {
     const evs = sess.filter(s => s.Datum === d).map(s => {
       const c = caseById(s.Esetszam);
       const top = (toMin(s.Kezdes) - h0 * 60) / 60, hgt = Math.max(0.3, (toMin(s.Vege) - toMin(s.Kezdes)) / 60);
-      return `<button class="cal-ev ev-${stClass(s.Statusz)}" style="top:calc(var(--rh) * ${top});height:calc(var(--rh) * ${hgt})" data-act="${kind === 'home' ? 'open-session' : 'cal-busy'}" data-id="${esc(s.Foglalkozas_ID)}" aria-label="${esc((c ? c.Nev : s.Esetszam) + ' ' + s.Kezdes)}">${esc(initials(c ? c.Nev : ''))}</button>`;
+      return `<button class="cal-ev ev-${stClass(s.Statusz)}" style="top:calc(var(--rh) * ${top});height:calc(var(--rh) * ${hgt})" ${kind === 'home' ? `data-act="open-session" data-id="${esc(s.Foglalkozas_ID)}"` : `data-act="cal-slot" data-k="pick" data-date="${d}"`} aria-label="${esc((c ? c.Nev : s.Esetszam) + ' ' + s.Kezdes)}">${esc(initials(c ? c.Nev : ''))}</button>`;
     }).join('');
     const exs = extEv.filter(x => x.date === d && !x.allDay).map(x => {
       const top = (toMin(x.start) - h0 * 60) / 60, hgt = Math.max(0.3, (toMin(x.end) - toMin(x.start)) / 60);
-      return `<button class="cal-ev ev-ext" style="top:calc(var(--rh) * ${top});height:calc(var(--rh) * ${hgt})" data-act="cal-ext" data-id="${esc(x.id)}" data-date="${d}" data-start="${esc(x.start)}" aria-label="${esc(x.title + ' ' + x.start)}">${esc(x.title)}</button>`;
+      return `<button class="cal-ev ev-ext" style="top:calc(var(--rh) * ${top});height:calc(var(--rh) * ${hgt})" ${kind === 'home' ? `data-act="cal-ext" data-id="${esc(x.id)}" data-date="${d}" data-start="${esc(x.start)}"` : `data-act="cal-slot" data-k="pick" data-date="${d}"`} aria-label="${esc(x.title + ' ' + x.start)}">${esc(x.title)}</button>`;
     }).join('');
     const pv = sel && sel.date === d
       ? `<div class="cal-sel" style="top:calc(var(--rh) * ${(toMin(sel.start) - h0 * 60) / 60});height:calc(var(--rh) * ${(toMin(selEnd) - toMin(sel.start)) / 60})"></div>` : '';
     const now = d === t && nowM >= h0 * 60 && nowM < h1 * 60
       ? `<div class="cal-now" style="top:calc(var(--rh) * ${(nowM - h0 * 60) / 60})"></div>` : '';
-    return `<div class="cal-col">${slots}${exs}${evs}${pv}${now}</div>`;
+    return `<div class="cal-col${d === selDay ? ' selday' : ''}">${slots}${exs}${evs}${pv}${now}</div>`;
   }).join('');
   const adOn = d => extEv.filter(x => x.date === d && x.allDay);
   const adRow = days.some(d => adOn(d).length)
     ? `<div class="cal-adlab">egész nap</div>` + days.map(d => {
         const l = adOn(d);
-        return `<div class="cal-ad">${l.length ? `<button class="cal-adb" data-act="cal-ext" data-id="${esc(l[0].id)}" data-date="${d}" data-start="">${esc(l[0].title)}${l.length > 1 ? ' +' + (l.length - 1) : ''}</button>` : ''}</div>`;
+        return `<div class="cal-ad">${l.length ? `<button class="cal-adb" ${kind === 'home' ? `data-act="cal-ext" data-id="${esc(l[0].id)}" data-date="${d}" data-start=""` : `data-act="cal-slot" data-k="pick" data-date="${d}"`}>${esc(l[0].title)}${l.length > 1 ? ' +' + (l.length - 1) : ''}</button>` : ''}</div>`;
       }).join('')
     : '';
   const thisWeek = week === mondayOf(t);
@@ -831,18 +846,79 @@ function calendarHtml(kind, o) {
   </div>`;
 }
 
+const PICK_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17];   // az ülések egész órakor kezdődnek; ez a legkorábbi és legkésőbbi kezdés
+
+/** Foglalt-e az adott óra (óra:00 és óra:50 között): az app ülései és a Google Naptár időpontos eseményei alapján. */
+function slotBusy(date, hh, excludeId) {
+  if (!date || !validTime(hh)) return null;
+  const a = toMin(hh), b = a + SESSION_MINUTES;
+  const s = state.data.sessions.find(x => x.Foglalkozas_ID !== excludeId && x.Datum === date && toMin(x.Kezdes) < b && toMin(x.Vege) > a);
+  if (s) return { by: 'ülés' };
+  const ev = ((state.ext[mondayOf(date)] || {}).events || []).find(x => !x.allDay && x.date === date && toMin(x.start) < b && toMin(x.end) > a);
+  return ev ? { by: 'naptár' } : null;
+}
+
+function hoursHtml(date, sel, excludeId) {
+  const ext = state.ext[mondayOf(date)] || {};
+  const btns = PICK_HOURS.map(h => {
+    const hh = pad(h) + ':00', busy = slotBusy(date, hh, excludeId), on = sel === hh;
+    return `<button type="button" class="hourbtn${on ? ' on' : ''}${busy ? ' busy' : ''}" data-act="pick-hour" data-h="${hh}" ${busy ? 'disabled title="Foglalt"' : ''} aria-pressed="${on}">${hh}${busy ? '<small>foglalt</small>' : ''}</button>`;
+  }).join('');
+  const allDay = (ext.events || []).filter(x => x.allDay && x.date === date);
+  return `<div class="hours">${btns}</div>` +
+    (allDay.length ? `<div class="tablenote">Egész napos esemény a naptárban: ${esc(allDay.map(x => x.title).join(', '))}</div>` : '') +
+    (ext.loading ? `<div class="tablenote">A Google Naptár betöltése…</div>` : '') +
+    (ext.error ? `<div class="tablenote">A Google Naptár nem érhető el, a foglaltság csak az app ülései alapján látszik.</div>` : '');
+}
+
+function pickSummaryHtml(date, start, end, excludeId) {
+  if (!date) return '<span class="muted">Válassz egy napot.</span>';
+  const wd = parseD(date).toLocaleDateString('hu-HU', { weekday: 'long' });
+  const day = wd.charAt(0).toUpperCase() + wd.slice(1) + ', ' + fmtFull(date);
+  if (!validTime(start)) return `<b>${esc(day)}</b><span class="muted">Válassz egy időpontot.</span>`;
+  const busy = slotBusy(date, start, excludeId);
+  return `<b>${esc(day)}, ${esc(start)}\u2013${esc(validTime(end) ? end : addMin(start, SESSION_MINUTES))}</b>` +
+    (busy ? '<span class="expnote bad">Ez az időpont foglalt.</span>' : '');
+}
+
 function pickOpts() {
   const g = n => { const e = $('[name="' + n + '"]'); return e ? e.value : ''; };
   return { excludeId: g('Foglalkozas_ID'), sel: { date: g('Datum'), start: g('Kezdes'), end: g('Vege') } };
 }
+
+/** A naptár, az óragombok és az összefoglaló mező együtt frissül. */
+function refreshPick() {
+  const dt = $('input[name="Datum"]'), st = $('input[name="Kezdes"]'), en = $('input[name="Vege"]');
+  if (!dt) return;
+  const o = pickOpts();
+  if (st && st.value && state.pickAuto && slotBusy(dt.value, st.value, o.excludeId)) {   // előtöltött, de (a naptár betöltése után) foglalt
+    st.value = ''; if (en) en.value = '';
+    o.sel.start = ''; o.sel.end = '';
+  }
+  const cal = $('#cal-pick'); if (cal) cal.innerHTML = calendarHtml('pick', o);
+  const hrs = $('#hour-pick'); if (hrs) hrs.innerHTML = hoursHtml(o.sel.date, o.sel.start, o.excludeId);
+  const sum = $('#pick-summary'); if (sum) sum.innerHTML = pickSummaryHtml(o.sel.date, o.sel.start, o.sel.end, o.excludeId);
+}
+
+/** Új nap kiválasztása: a korábban választott óra csak akkor marad, ha azon a napon szabad. */
+function applyDay(date) {
+  const dt = $('input[name="Datum"]'), st = $('input[name="Kezdes"]'), en = $('input[name="Vege"]'), id = $('input[name="Foglalkozas_ID"]');
+  if (!dt) return;
+  dt.value = date;
+  if (st && st.value && slotBusy(date, st.value, id ? id.value : '')) { st.value = ''; if (en) en.value = ''; }
+  updateExpiryNote();
+  syncPick();
+}
+
 function refreshCal(kind) {
+  if (kind === 'pick') { refreshPick(); return; }
   const box = $('#cal-' + kind);
-  if (box) box.innerHTML = calendarHtml(kind, kind === 'pick' ? pickOpts() : {});
+  if (box) box.innerHTML = calendarHtml(kind, {});
 }
 function syncPick() {
   const dt = $('input[name="Datum"]');
   if (dt && dt.value) state.pick.week = mondayOf(dt.value);
-  refreshCal('pick');
+  refreshPick();
 }
 
 /* Kezdőlap */
@@ -1023,7 +1099,7 @@ function sessionListHtml() {
   } else if (f === 'past') {
     list = all.filter(s => s.Datum < t).reverse(); empty = 'Még nincs korábbi ülés.';
   } else {
-    list = all.filter(s => s.Datum >= t); empty = 'Nincs közelgő ülés.';
+    list = all.filter(s => s.Datum >= t && s.Statusz === ST.PLANNED); empty = 'Nincs közelgő tervezett ülés.';
   }
   if (!list.length) return `<div class="empty">${empty}</div>`;
   if (f === 'past') {
@@ -1214,7 +1290,7 @@ function viewCaseForm(id) {
 /* Ülés űrlap */
 function sessionDefaults(caseId, fromId) {
   const settings = state.data.settings;
-  const v = { Foglalkozas_ID: '', Esetszam: caseId || '', Datum: addDays(todayStr(), 1), Kezdes: '10:00', Vege: addMin('10:00', SESSION_MINUTES),
+  const v = { Foglalkozas_ID: '', Esetszam: caseId || '', Datum: addDays(todayStr(), 1), Kezdes: '', Vege: '',
     Tipus: settings.types[0], Statusz: ST.PLANNED, Megjegyzes: '' };
   const from = fromId && sessionById(fromId);
   const ref = from || (caseId ? sessionsOf(caseId).slice(-1)[0] : null);
@@ -1253,6 +1329,8 @@ function viewSessionForm(id, params) {
     if (validTime(pt)) { v.Kezdes = pt; v.Vege = addMin(pt, SESSION_MINUTES); }
   }
   state.pick.week = mondayOf(v.Datum);
+  state.pickAuto = !existing && !params.get('time') && !!v.Kezdes;   // az előző ülés idejéből előtöltött érték
+  if (state.pickAuto && slotBusy(v.Datum, v.Kezdes, v.Foglalkozas_ID)) { v.Kezdes = ''; v.Vege = ''; }   // foglalt időpontot nem töltünk elő
   const settings = state.data.settings;
   const cases = state.data.cases
     .filter(c => c.Statusz !== 'Lezárt' || c.Esetszam === v.Esetszam)
@@ -1268,19 +1346,22 @@ function viewSessionForm(id, params) {
       <details class="calbox" ${existing ? '' : 'open'}><summary>Naptár: szabad időpontok</summary>
         <div id="cal-pick">${calendarHtml('pick', { excludeId: v.Foglalkozas_ID, sel: { date: v.Datum, start: v.Kezdes, end: v.Vege } })}</div>
       </details>
-      <div class="fld" data-f="Datum"><span>Dátum</span>
-        <input type="date" name="Datum" value="${esc(v.Datum)}">
+      <div class="fld" data-f="Datum">
+        <input type="hidden" name="Datum" value="${esc(v.Datum)}">
+        <span>Nap <em>(koppints a naptárban egy napra, vagy válassz gyorsan)</em></span>
         <div class="quick">
           <button type="button" data-act="date-set" data-d="0">Ma</button>
           <button type="button" data-act="date-set" data-d="1">Holnap</button>
           <button type="button" data-act="date-add" data-d="7">+1 hét</button>
         </div><div class="msg"></div></div>
-      <div class="row2">
-        <label class="fld" data-f="Kezdes"><span>Kezdés</span>
-          <input type="time" name="Kezdes" value="${esc(v.Kezdes)}"><div class="msg"></div></label>
-        <label class="fld" data-f="Vege"><span>Vége</span>
-          <input type="time" name="Vege" value="${esc(v.Vege)}"><div class="msg"></div></label>
-      </div>
+      <div class="fld" data-f="Kezdes">
+        <input type="hidden" name="Kezdes" value="${esc(v.Kezdes)}">
+        <input type="hidden" name="Vege" value="${esc(v.Vege)}">
+        <span>Időpont <em>(egész órakor kezdődik, ${PICK_HOURS[0]} és ${PICK_HOURS[PICK_HOURS.length - 1]} óra között)</em></span>
+        <div id="hour-pick">${hoursHtml(v.Datum, v.Kezdes, v.Foglalkozas_ID)}</div>
+        <div class="msg"></div></div>
+      <div class="fld"><span>Kiválasztott időpont</span>
+        <div class="pickfield" id="pick-summary" aria-live="polite">${pickSummaryHtml(v.Datum, v.Kezdes, v.Vege, v.Foglalkozas_ID)}</div></div>
       <div class="fld"><span>Típus</span>
         <div class="seg" role="radiogroup">
           ${settings.types.map(t => `<label><input type="radio" name="Tipus" value="${esc(t)}" ${t === v.Tipus ? 'checked' : ''}><span>${typeIcon(t)}${esc(t)}</span></label>`).join('')}
@@ -1817,6 +1898,13 @@ async function setStatus(id, status, btn) {
   closeSheet();
   if (meetErr) toast('Státusz mentve, de a naptári esemény nem frissült: ' + meetErr, true);
   else toast('Státusz mentve: ' + status);
+  // "Megtartva" után: ha az esetnek nincs több tervezett ülése és maradt még alkalom, megnyílik az új ülés ugyanahhoz az esethez
+  const done = sessionById(id), dc = done ? caseById(done.Esetszam) : null;
+  if (status === ST.HELD && done && dc && dc.Statusz === 'Aktív' && dc.stats.remaining > 0 &&
+      !state.data.sessions.some(x => x.Esetszam === done.Esetszam && x.Statusz === ST.PLANNED && startKey(x) >= nowKey())) {
+    go('#/session/new?case=' + encodeURIComponent(done.Esetszam) + '&from=' + encodeURIComponent(id));
+    return;
+  }
   if (!isFormRoute()) render(true);
 }
 
@@ -1897,8 +1985,8 @@ async function saveSession(btn, force) {
   const inv = $('input[name="Meghivo"]');
   v.Meghivo = !!(inv && inv.checked);
   if (!v.Esetszam) return fieldError('Esetszam', 'Válassz ki egy esetet.');
-  if (!v.Datum) return fieldError('Datum', 'Add meg a dátumot.');
-  if (!v.Kezdes) return fieldError('Kezdes', 'Add meg a kezdést.');
+  if (!v.Datum) return fieldError('Datum', 'Válassz ki egy napot.');
+  if (!v.Kezdes) return fieldError('Kezdes', 'Válassz ki egy időpontot.');
   if (!v.Vege) v.Vege = addMin(v.Kezdes, SESSION_MINUTES);
   if (v.Vege <= v.Kezdes) return fieldError('Vege', 'A végének a kezdés után kell lennie.');
   if (!v.Tipus) return toast('Válassz típust.', true);
@@ -1991,11 +2079,11 @@ document.addEventListener('click', e => {
       inp.value = n; break;
     }
     case 'date-set': {
-      $('input[name="Datum"]').value = addDays(todayStr(), Number(el.dataset.d)); updateExpiryNote(); syncPick(); break;
+      $('input[name="Datum"]').value = addDays(todayStr(), Number(el.dataset.d)); applyDay($('input[name="Datum"]').value); break;
     }
     case 'date-add': {
       const inp = $('input[name="Datum"]');
-      inp.value = addDays(inp.value || todayStr(), Number(el.dataset.d)); updateExpiryNote(); syncPick(); break;
+      inp.value = addDays(inp.value || todayStr(), Number(el.dataset.d)); applyDay(inp.value); break;
     }
     case 'save-case': saveCase(el.dataset.id || '', el); break;
     case 'save-session': saveSession(el); break;
@@ -2038,18 +2126,17 @@ document.addEventListener('click', e => {
     }
     case 'cal-slot': {
       if (el.dataset.k === 'home') { go('#/session/new?date=' + el.dataset.date + '&time=' + el.dataset.time); break; }
-      const dt = $('input[name="Datum"]'), st = $('input[name="Kezdes"]'), en = $('input[name="Vege"]');
-      if (dt && st && en) {
-        dt.value = el.dataset.date; st.value = el.dataset.time; en.value = addMin(el.dataset.time, SESSION_MINUTES);
-        en.dataset.touched = '';
-        updateExpiryNote(); syncPick();
-      }
+      applyDay(el.dataset.date);   // az űrlapban a naptár csak a napot állítja be
       break;
     }
-    case 'cal-ext': {
-      const list = ((state.ext[mondayOf(el.dataset.date)] || {}).events || [])
-        .filter(x => x.id === el.dataset.id && x.date === el.dataset.date);
-      if (list[0]) extSheet(list[0]);
+    case 'pick-hour': {
+      const st = $('input[name="Kezdes"]'), en = $('input[name="Vege"]');
+      if (st && en) {
+        st.value = el.dataset.h; en.value = addMin(el.dataset.h, SESSION_MINUTES);
+        state.pickAuto = false;
+        const f = document.querySelector('.fld[data-f="Kezdes"]'); if (f) f.classList.remove('err');
+        refreshPick();
+      }
       break;
     }
     case 'cal-busy': {
