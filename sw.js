@@ -1,6 +1,6 @@
-// Egyszerű service worker: az alkalmazás keretét (HTML, ikonok) gyorsítótárazza.
-// Az Apps Script hívásokat (más eredet, POST) sosem érinti, az adatok mindig frissek.
-const CACHE = 'konzultaciok-v2';
+// A GitHub-oldal csak egy vékony "héj" (index.html, ikonok). Maga az alkalmazás az Apps Scriptből töltődik be,
+// ezért az Apps Script frissítése után ide nem kell semmit feltölteni.
+const CACHE = 'konzultaciok-shell-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -18,7 +18,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  // Hálózat először (így a frissítések megérkeznek), offline esetén a gyorsítótár.
+  // hálózat először, offline esetén a gyorsítótár
   e.respondWith(
     fetch(req).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
