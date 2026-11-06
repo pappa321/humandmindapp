@@ -1,6 +1,6 @@
 // A GitHub-oldal csak egy vékony "héj" (index.html, ikonok). Maga az alkalmazás az Apps Scriptből töltődik be,
 // ezért az Apps Script frissítése után ide nem kell semmit feltölteni.
-const CACHE = 'konzultaciok-shell-v4';
+const CACHE = 'konzultaciok-shell-v5';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
